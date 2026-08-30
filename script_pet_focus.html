@@ -1,0 +1,3814 @@
+<script>
+// ========================
+// BACKGROUND CUSTOMIZATION
+// ========================
+
+// ========================
+// VIRTUAL PET SYSTEM
+// ========================
+const PET_CONFIG = [
+  { id: 'pet_chick', name: 'Gà Con Chăm Chỉ', icon: '🐥', cost: 0, desc: 'Luôn thức dậy sớm để học bài!', texts: ['Cố lên nhé!', 'Mổ mổ mổ!', 'Sắp xong rồi!', 'Chăm chỉ quá đi!'] },
+  { id: 'pet_dog', name: 'Corgi Năng Động', icon: '🐕', cost: 1000, desc: 'Người bạn trung thành nhất.', texts: ['Gâu gâu!', 'Học tiếp đi ông chủ!', 'Ngoàm ngoàm...', 'Sắp thi rồi, chạy thôi!'] },
+  { id: 'pet_turtle', name: 'Rùa Thông Thái', icon: '🐢', cost: 2500, desc: 'Chậm mà chắc.', texts: ['Chậm mà chắc bạn nhé.', 'Đường dài mới biết ngựa hay.', 'Ngáp...'] },
+  { id: 'pet_penguin', name: 'Cánh Cụt Cute', icon: '🐧', cost: 3000, desc: 'Sẵn sàng trượt băng qua mọi bài thi.', texts: ['Lạnh quá!', 'Trượt trượt trượt!', 'Đậu đại học chắc chắn!'] },
+  { id: 'pet_cat', name: 'Mèo Máy Mập', icon: '🐈', cost: 5000, desc: 'Thích ngủ nướng nhưng rất thông minh.', texts: ['Meo meo...', 'Zzz...', 'Đừng sờ vào lông tôi.', 'Học giỏi thưởng pate nhé?'] },
+  { id: 'pet_elephant', name: 'Voi Đôn Hậu', icon: '🐘', cost: 8000, desc: 'Khỏe mạnh và kiên nhẫn.', texts: ['Phụt nước!', 'Ngáp...', 'Thư giãn đi chủ nhân!'] },
+  { id: 'pet_dinosaur', name: 'Khủng Long T-Rex', icon: '🦖', cost: 12000, desc: 'Mạnh mẽ vượt qua bài kiểm tra.', texts: ['Gàooo!', 'Tôi rất khỏe!', 'Chăm chỉ nào!'] },
+  { id: 'pet_monkey', name: 'Khỉ Tinh Nghịch', icon: '🐒', cost: 15000, desc: 'Nhanh nhẹn và thông minh.', texts: ['Khẹt khẹt!', 'Leo trèo thôi!', 'Học lẹ nào~'] },
+  { id: 'pet_dragon', name: 'Tiểu Long Mạch', icon: '🐉', cost: 20000, desc: 'Mang lại sự may mắn tuyệt đối.', texts: ['Khè khè...', 'May mắn trọn đời!', 'Vượt vũ môn!', 'Tri thức là sức mạnh!'] },
+  { id: 'pet_horse', name: 'Ngựa Bất Khâm', icon: '🐎', cost: 50000, desc: 'Chạy một mạch tới thành công.', texts: ['Hí hí hí!', 'Đường xa mới biết ngựa hay!', 'Mọi điều đều có thể!'] }
+];
+
+const PET_ACCESSORIES = [
+  { id: 'acc_crown', name: 'Vương miện Hoàng Gia', icon: '👑', cost: 1200, desc: 'Pet của bạn sẽ trông quý tộc hơn bao giờ hết!', style: 'top: -12px; left: 16px; font-size: 24px;' },
+  { id: 'acc_sunglasses', name: 'Kính râm Siêu Ngầu', icon: '🕶️', cost: 600, desc: 'Cực chất, siêu ngầu, thách thức mọi ánh nhìn.', style: 'top: 18px; left: 22px; font-size: 22px;' },
+  { id: 'acc_strawhat', name: 'Nón Rơm Luffy', icon: '👒', cost: 800, desc: 'Vua Hải Tặc tương lai, sẵn sàng khơi hành!', style: 'top: -16px; left: 14px; font-size: 32px;' },
+  { id: 'acc_ribbon', name: 'Nơ Đỏ Quý Phái', icon: '🎀', cost: 400, desc: 'Một chiếc nơ đỏ xinh xắn thắt bên tai.', style: 'top: 2px; left: 40px; font-size: 20px;' },
+  { id: 'acc_wizard', name: 'Nón Phù Thủy', icon: '🧙', cost: 1500, desc: 'Mang phép thuật kỳ diệu hỗ trợ học tập!', style: 'top: -24px; left: 16px; font-size: 28px;' },
+  { id: 'acc_balloon', name: 'Bóng Bay Trái Tim', icon: '🎈', cost: 500, desc: 'Bóng bay bay bổng bên cạnh người bạn nhỏ.', style: 'top: 10px; left: -16px; font-size: 24px;' },
+  { id: 'acc_headphones', name: 'Tai Nghe Gaming', icon: '🎧', cost: 1000, desc: 'Cách âm hoàn hảo để học tập tập trung!', style: 'top: 12px; left: 18px; font-size: 30px;' },
+  { id: 'acc_angel', name: 'Vòng Thiên Thần', icon: '👼', cost: 2000, desc: 'Vòng sáng thánh thiện hộ mệnh cho kỳ thi.', style: 'top: -22px; left: 20px; font-size: 24px;' }
+];
+
+const ACCESSORY_OFFSETS = {
+  'acc_crown': {
+    'pet_chick': { top: '-12px', left: '16px' },
+    'pet_dog': { top: '-4px', left: '20px' },
+    'pet_turtle': { top: '6px', left: '12px' },
+    'pet_penguin': { top: '-10px', left: '16px' },
+    'pet_cat': { top: '-2px', left: '18px' },
+    'pet_elephant': { top: '-4px', left: '12px' },
+    'pet_dinosaur': { top: '-14px', left: '16px' },
+    'pet_monkey': { top: '-10px', left: '18px' },
+    'pet_dragon': { top: '-10px', left: '22px' },
+    'pet_horse': { top: '-16px', left: '22px' }
+  },
+  'acc_sunglasses': {
+    'pet_chick': { top: '18px', left: '22px' },
+    'pet_dog': { top: '18px', left: '22px' },
+    'pet_turtle': { top: '24px', left: '20px' },
+    'pet_penguin': { top: '14px', left: '24px' },
+    'pet_cat': { top: '18px', left: '24px' },
+    'pet_elephant': { top: '18px', left: '18px' },
+    'pet_dinosaur': { top: '14px', left: '26px' },
+    'pet_monkey': { top: '18px', left: '24px' },
+    'pet_dragon': { top: '18px', left: '24px' },
+    'pet_horse': { top: '16px', left: '24px' }
+  },
+  'acc_strawhat': {
+    'pet_chick': { top: '-16px', left: '14px' },
+    'pet_dog': { top: '-8px', left: '16px' },
+    'pet_turtle': { top: '2px', left: '10px' },
+    'pet_penguin': { top: '-12px', left: '14px' },
+    'pet_cat': { top: '-6px', left: '14px' },
+    'pet_elephant': { top: '-8px', left: '8px' },
+    'pet_dinosaur': { top: '-18px', left: '14px' },
+    'pet_monkey': { top: '-14px', left: '14px' },
+    'pet_dragon': { top: '-14px', left: '16px' },
+    'pet_horse': { top: '-20px', left: '16px' }
+  },
+  'acc_ribbon': {
+    'pet_chick': { top: '2px', left: '40px' },
+    'pet_dog': { top: '8px', left: '40px' },
+    'pet_turtle': { top: '12px', left: '34px' },
+    'pet_penguin': { top: '4px', left: '40px' },
+    'pet_cat': { top: '8px', left: '40px' },
+    'pet_elephant': { top: '10px', left: '34px' },
+    'pet_dinosaur': { top: '-2px', left: '40px' },
+    'pet_monkey': { top: '4px', left: '40px' },
+    'pet_dragon': { top: '4px', left: '40px' },
+    'pet_horse': { top: '0px', left: '40px' }
+  },
+  'acc_wizard': {
+    'pet_chick': { top: '-24px', left: '16px' },
+    'pet_dog': { top: '-14px', left: '18px' },
+    'pet_turtle': { top: '-4px', left: '14px' },
+    'pet_penguin': { top: '-20px', left: '16px' },
+    'pet_cat': { top: '-14px', left: '16px' },
+    'pet_elephant': { top: '-16px', left: '10px' },
+    'pet_dinosaur': { top: '-26px', left: '14px' },
+    'pet_monkey': { top: '-20px', left: '16px' },
+    'pet_dragon': { top: '-22px', left: '18px' },
+    'pet_horse': { top: '-28px', left: '18px' }
+  },
+  'acc_balloon': {
+    'pet_chick': { top: '10px', left: '-16px' },
+    'pet_dog': { top: '14px', left: '-16px' },
+    'pet_turtle': { top: '18px', left: '-16px' },
+    'pet_penguin': { top: '12px', left: '-16px' },
+    'pet_cat': { top: '14px', left: '-16px' },
+    'pet_elephant': { top: '14px', left: '-16px' },
+    'pet_dinosaur': { top: '10px', left: '-16px' },
+    'pet_monkey': { top: '12px', left: '-16px' },
+    'pet_dragon': { top: '10px', left: '-16px' },
+    'pet_horse': { top: '8px', left: '-16px' }
+  },
+  'acc_headphones': {
+    'pet_chick': { top: '12px', left: '18px' },
+    'pet_dog': { top: '18px', left: '20px' },
+    'pet_turtle': { top: '22px', left: '16px' },
+    'pet_penguin': { top: '14px', left: '18px' },
+    'pet_cat': { top: '18px', left: '18px' },
+    'pet_elephant': { top: '18px', left: '14px' },
+    'pet_dinosaur': { top: '12px', left: '20px' },
+    'pet_monkey': { top: '16px', left: '18px' },
+    'pet_dragon': { top: '14px', left: '22px' },
+    'pet_horse': { top: '10px', left: '22px' }
+  },
+  'acc_angel': {
+    'pet_chick': { top: '-22px', left: '20px' },
+    'pet_dog': { top: '-14px', left: '22px' },
+    'pet_turtle': { top: '-4px', left: '18px' },
+    'pet_penguin': { top: '-18px', left: '20px' },
+    'pet_cat': { top: '-12px', left: '20px' },
+    'pet_elephant': { top: '-14px', left: '16px' },
+    'pet_dinosaur': { top: '-24px', left: '18px' },
+    'pet_monkey': { top: '-18px', left: '20px' },
+    'pet_dragon': { top: '-20px', left: '22px' },
+    'pet_horse': { top: '-26px', left: '22px' }
+  }
+};
+
+let activePets = [];
+
+class ActivePet {
+  constructor(config, id) {
+    this.config = config; // config from PET_CONFIG or custom
+    this.id = id || Math.random().toString(36).substr(2, 9);
+    this.customName = getCleanLocalStorage(`pet_name_${this.id}`) || config.name || "Pet";
+    this.posX = window.innerWidth / 2 + (Math.random() - 0.5) * 200;
+    this.posY = window.innerHeight - 80 - (Math.random() * 40);
+    this.targetX = this.posX;
+    this.targetY = this.posY;
+    this.direction = 1;
+    this.walking = true;
+    this.idleTimer = 0;
+    this.isJumping = false;
+    this.jumpStartTime = 0;
+    this.jumpY = 0;
+    this.isGoingToGames = false;
+    this.isAwaitingGameTrigger = false;
+    this.gameWaitTimer = null;
+    this.lastSayTime = 0;
+    this.isDragging = false;
+    this.mouseX = this.posX;
+    this.mouseY = this.posY;
+    this.dragOffsetX = 0;
+    this.dragOffsetY = 0;
+    this.currentZIndex = 0;
+    
+    this.createDom();
+    // Khởi tạo vị trí ngay lập tức để tránh bị nhảy từ (0,0)
+    this.container.style.transform = `translate3d(${this.posX}px, ${this.posY}px, 0)`;
+    this.updateTarget();
+  }
+
+  createDom() {
+    this.container = document.createElement("div");
+    this.container.id = `pet-container-${this.id}`;
+    this.container.className = "active-pet-container";
+    this.container.style.cssText = `position: fixed; top: 0px; left: 0px; z-index: 100005; pointer-events: none; transition: none; will-change: transform; width: 70px; height: 70px;`;
+    
+    this.bubble = document.createElement("div");
+    this.bubble.id = `pet-bubble-${this.id}`;
+    // Optimized: removed transition for properties updated frequently if any, but opacity is fine.
+    this.bubble.style.cssText = `position: absolute; bottom: 82px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 16px; border-radius: 18px; font-size: 13.5px; font-weight: 700; color: #1e293b; text-align: center; min-width: 60px; white-space: nowrap; line-height: 1.4; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); opacity: 0; transition: opacity 0.3s ease; z-index: 10; border: 2px solid #f1f5f9; display: flex; align-items: center; justify-content: center; pointer-events: none;`;
+    
+    // Add pet name label
+    this.nameLabel = document.createElement("div");
+    // Optimized: removed backdrop-filter blur as it causes lag during scroll
+    this.nameLabel.style.cssText = `position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); background: rgba(30, 41, 59, 0.85); color: white; padding: 2px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; white-space: nowrap; transition: opacity 0.3s; pointer-events: none; opacity: 0.8; border: 1px solid rgba(255,255,255,0.1);`;
+    this.nameLabel.innerText = this.customName;
+
+    this.sprite = document.createElement("div");
+    this.sprite.id = `pet-sprite-${this.id}`;
+    // Optimized: removed transition: transform as it conflicts with JS animation loop
+    this.sprite.style.cssText = `font-size: 60px; cursor: grab; pointer-events: auto; user-select: none; transition: filter 0.2s; display: flex; align-items: center; justify-content: center; width: 70px; height: 70px; will-change: transform; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.15)); position: relative;`;
+    
+    // Add hover effect
+    this.sprite.onmouseenter = () => this.sprite.style.filter = "drop-shadow(0 15px 20px rgba(0,0,0,0.25)) brightness(1.1)";
+    this.sprite.onmouseleave = () => this.sprite.style.filter = "drop-shadow(0 10px 15px rgba(0,0,0,0.15)) brightness(1)";
+    
+    if (this.config.isCustom) {
+      this.sprite.innerHTML = `<img src="${this.config.url}" style="width:65px;height:65px;object-fit:cover;border-radius:12px;display:block;">`;
+      this.sprite.dataset.texts = JSON.stringify(['Yêu bồ nhất!', 'Học tốt nha!', 'Gọi tớ hả?', 'Bạn đỉnh nhất!', 'Cố lên nà!']);
+    } else {
+      this.sprite.innerHTML = this.config.icon;
+      this.sprite.dataset.texts = JSON.stringify(this.config.texts || []);
+    }
+    
+    // Create accessory element inside sprite so it animates & flips with the pet
+    this.accessoryEl = document.createElement("div");
+    this.accessoryEl.style.cssText = `position: absolute; pointer-events: none; z-index: 15; transition: all 0.2s;`;
+    this.sprite.appendChild(this.accessoryEl);
+    this.updateAccessory();
+
+    this.container.appendChild(this.bubble);
+    this.container.appendChild(this.nameLabel);
+    this.container.appendChild(this.sprite);
+    document.body.appendChild(this.container);
+    
+    // Add heart effect element
+    this.effectLayer = document.createElement("div");
+    this.effectLayer.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;`;
+    this.container.appendChild(this.effectLayer);
+
+    this.lastSocialTime = performance.now(); 
+    this.isSleeping = false;
+    this.focusSession = null; 
+    this.setupDragging();
+  }
+
+  updateAccessory() {
+    // Check if there is an accessory equipped for this specific pet ID or pet type ID
+    const equippedAccId = getCleanLocalStorage(`pet_accessory_${this.id}`) || getCleanLocalStorage(`pet_accessory_${this.config.id}`);
+    if (equippedAccId) {
+      const acc = PET_ACCESSORIES.find(a => a.id === equippedAccId);
+      if (acc) {
+        this.accessoryEl.innerHTML = acc.icon;
+        
+        let top = "";
+        let left = "";
+        const offsets = ACCESSORY_OFFSETS[equippedAccId];
+        if (offsets) {
+          const petType = this.config.id || "";
+          const petOffsets = offsets[petType] || offsets['pet_chick'];
+          if (petOffsets) {
+            top = petOffsets.top;
+            left = petOffsets.left;
+          }
+        }
+        
+        let fontSize = "24px";
+        const fontSizeMatch = acc.style ? acc.style.match(/font-size:\s*(\d+px)/) : null;
+        if (fontSizeMatch) {
+          fontSize = fontSizeMatch[1];
+        } else if (equippedAccId === 'acc_strawhat') {
+          fontSize = '32px';
+        } else if (equippedAccId === 'acc_wizard') {
+          fontSize = '28px';
+        } else if (equippedAccId === 'acc_headphones') {
+          fontSize = '30px';
+        }
+        
+        if (top && left) {
+          this.accessoryEl.style.cssText = `position: absolute; pointer-events: none; z-index: 15; transition: all 0.2s; top: ${top}; left: ${left}; font-size: ${fontSize};`;
+        } else {
+          this.accessoryEl.style.cssText = `position: absolute; pointer-events: none; z-index: 15; transition: all 0.2s; ${acc.style || 'top: -10px; left: 16px; font-size: 24px;'}`;
+        }
+        this.accessoryEl.style.display = "block";
+        return;
+      }
+    }
+    this.accessoryEl.innerHTML = "";
+    this.accessoryEl.style.display = "none";
+  }
+
+  getTimeBasedGreeting() {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) return ["Sáng an lành nha! ☀️", "Cà phê sáng hông? ☕", "Dậy sớm là tốt nhất! 💪", "Ngày mới vui vẻ nhé! ☀️"];
+    if (hour >= 11 && hour < 14) return ["Ăn trưa thôi nà! 🍱", "Nhớ ăn đủ bữa nha! 🍎", "Chợp mắt tí cho khỏe! 😴", "Ngon miệng nhé! ✨"];
+    if (hour >= 14 && hour < 18) return ["Chiều mát mẻ nà! ✨", "Vươn vai cho đỡ mỏi! 🤸", "Luôn bên cạnh bạn! 💕", "Sắp xong rồi, cố lên! 🚀"];
+    if (hour >= 18 && hour < 23) return ["Tối học tốt nha! 🌙", "Mệt chưa? Thương nè! 💕", "Cố nốt hôm nay nà! 🚀", "Học hăng say quá! ✨"];
+    return ["Ngủ sớm đi bạn ơi! 💤", "Muộn rồi, ngủ thôi nà! 🛌", "Tớ cũng buồn ngủ rồi... 😴", "Ngủ ngon nha! 🌙"];
+  }
+
+  setupDragging() {
+    let dragStartX = 0, dragStartY = 0;
+    let isActuallyDragging = false;
+
+    const startDrag = (e) => {
+      this.isDragging = true;
+      isActuallyDragging = false;
+      this.walking = false;
+      this.isGoingToGames = false;
+      this.idleTimer = 999999;
+      
+      const rect = this.container.getBoundingClientRect();
+      this.dragOffsetX = e.clientX - rect.left;
+      this.dragOffsetY = e.clientY - rect.top;
+      
+      // Update current mouse position targets to prevent snapping to old positions
+      this.mouseX = rect.left;
+      this.mouseY = rect.top;
+      
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+
+      if (e.pointerId !== undefined) {
+        this.sprite.setPointerCapture(e.pointerId);
+      }
+    };
+
+    const onDrag = (e) => {
+      if (!this.isDragging) return;
+      
+      const movementX = e.clientX - dragStartX; 
+      const movementY = e.clientY - dragStartY; 
+      
+      if (!isActuallyDragging && (Math.abs(movementX) > 5 || Math.abs(movementY) > 5)) {
+        isActuallyDragging = true;
+        if (Math.random() < 0.3) {
+          this.say("Bế đi đâu đó? 🐾", 2000);
+        } else if (Math.random() < 0.5) {
+          this.say("Vèo vèo 🚀", 2000);
+        }
+      }
+      
+      this.mouseX = e.clientX - this.dragOffsetX;
+      this.mouseY = e.clientY - this.dragOffsetY;
+      
+      if (movementX > 2) this.direction = -1;
+      else if (movementX < -2) this.direction = 1;
+    };
+
+    const stopDrag = (e) => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        this.idleTimer = 1000;
+        if (e.pointerId !== undefined) {
+          try { this.sprite.releasePointerCapture(e.pointerId); } catch(err){}
+        }
+        if (!isActuallyDragging) {
+          this.interact();
+        }
+      }
+    };
+
+    this.sprite.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startDrag(e);
+    });
+    this.sprite.addEventListener("pointermove", onDrag);
+    this.sprite.addEventListener("pointerup", stopDrag);
+    this.sprite.addEventListener("pointercancel", stopDrag);
+  }
+
+  rename(newName) {
+    if (!newName) return;
+    this.customName = newName;
+    this.nameLabel.innerText = newName;
+    localStorage.setItem(`pet_name_${this.id}`, newName);
+  }
+
+  // --- FOCUS MODE (POMODORO) ---
+  startFocusMode(minutes, isSilent = false) {
+    if (this.focusSession) return;
+    
+    this.focusSession = {
+      startTime: Date.now(),
+      duration: minutes,
+      totalSeconds: minutes * 60,
+      remainingSeconds: minutes * 60
+    };
+    
+    this.walking = false;
+    if (!isSilent) {
+      localStorage.setItem("pet_stay_still", "true");
+      updatePetStayUI();
+      this.say(`🔥 Bắt đầu tập trung trong ${minutes} phút nhé!`, 3000);
+    }
+    
+    this.container.classList.add("pet-focus-mode");
+    this.emitHearts();
+  }
+
+  cancelFocusMode() {
+    if (!this.focusSession) return;
+    this.focusSession = null;
+    this.container.classList.remove("pet-focus-mode");
+    this.say("Đã dừng học! 🍃", 3000);
+    this.emitHearts();
+  }
+
+  completeFocusMode(isMaster = false) {
+    if (!this.focusSession) return;
+    const duration = this.focusSession.duration;
+    this.focusSession = null;
+    this.container.classList.remove("pet-focus-mode");
+    
+    this.say("🎉 Giỏi quá! Đã xong rồi!", 5000);
+    this.emitHearts();
+    
+    if (isMaster) {
+      localStorage.setItem("pet_stay_still", "false");
+      updatePetStayUI();
+      if (typeof resetFocusUI === "function") resetFocusUI();
+
+      google.script.run.withSuccessHandler((response) => {
+        if (response && response.success) {
+          showToast(`✨ Tuyệt vời! Bạn nhận được ${response.reward} 🪙 thưởng tập trung!`, "success");
+          if (typeof refreshUserPoints === "function") refreshUserPoints();
+          if (typeof shootConfetti === "function") shootConfetti();
+        }
+      }).completeFocusSession(duration);
+    }
+  }
+
+  updateFocusTimer() {
+    if (!this.focusSession) return;
+    
+    const nowMs = Date.now();
+    // Tối ưu: Chỉ cập nhật giao diện mỗi giây một lần thay vì mỗi frame
+    if (this.lastTimerUpdate && nowMs - this.lastTimerUpdate < 1000) return;
+    this.lastTimerUpdate = nowMs;
+
+    const elapsed = Math.floor((nowMs - this.focusSession.startTime) / 1000);
+    this.focusSession.remainingSeconds = this.focusSession.totalSeconds - elapsed;
+    
+    if (this.focusSession.remainingSeconds <= 0) {
+      const isMaster = (activePets[0] === this);
+      this.completeFocusMode(isMaster);
+      
+      if (isMaster) {
+        activePets.forEach(p => {
+           if (p !== this && p.focusSession) p.completeFocusMode(false);
+        });
+      }
+      return;
+    }
+    
+    const m = Math.floor(this.focusSession.remainingSeconds / 60);
+    const s = this.focusSession.remainingSeconds % 60;
+    const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+    
+    // Sync with Interaction Popup if open
+    const interactTimer = document.getElementById("interactTimerDisplay");
+    if (interactTimer && document.getElementById("petInteractionPopup").style.display !== "none") {
+      interactTimer.innerText = timeStr;
+    }
+
+    // Hiển thị thời gian trực tiếp lên bubble
+    if (this.bubble) {
+      // Chỉ thay đổi textNode để tránh layout reflow nặng
+      if (this.bubble.firstChild && this.bubble.firstChild.nodeType === 3) {
+        this.bubble.firstChild.textContent = `⏱️ ${timeStr}`;
+      } else {
+        this.bubble.innerText = `⏱️ ${timeStr}`;
+      }
+      this.bubble.style.opacity = "1";
+      this.bubble.style.transform = "translateX(-50%) translateY(0px)";
+      this.nameLabel.style.opacity = "0";
+      
+      // Re-add arrow
+      let tip = this.bubble.querySelector(".bubble-tip");
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.className = "bubble-tip";
+        tip.style.cssText = `position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #f1f5f9 transparent transparent transparent;`;
+        this.bubble.appendChild(tip);
+      }
+    }
+  }
+
+  say(text, duration = 4000) {
+    if (!this.bubble) return;
+    
+    // Anti-spam: limit message frequency per pet
+    const now = performance.now();
+    if (this.lastSayTime && (now - this.lastSayTime < 2000)) return;
+    this.lastSayTime = now;
+
+    this.bubble.innerText = text;
+    
+    // Re-add arrow
+    let tip = document.createElement('div');
+    tip.style.cssText = `position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #f1f5f9 transparent transparent transparent;`;
+    this.bubble.appendChild(tip);
+    
+    this.bubble.style.opacity = "1";
+    this.bubble.style.transform = "translateX(-50%) translateY(0px)";
+    this.nameLabel.style.opacity = "0"; // Hide name label when talking for clarity
+    
+    clearTimeout(this.bubbleTimer);
+    this.bubbleTimer = setTimeout(() => {
+      this.bubble.style.opacity = "0";
+      this.bubble.style.transform = "translateX(-50%) translateY(5px)";
+      this.nameLabel.style.opacity = "0.8";
+    }, duration);
+  }
+
+  interact(showUI = true) {
+    if (this.isAwaitingGameTrigger) {
+      this.isAwaitingGameTrigger = false;
+      if (typeof toggleGameBox === 'function') toggleGameBox();
+      this.say("Zô thôi chủ nhân ơi! 🚀");
+      return;
+    }
+
+    const popup = document.getElementById("petInteractionPopup");
+    if (popup && showUI) {
+      document.getElementById("interactPetName").innerText = this.customName;
+      document.getElementById("interactPetIcon").innerText = this.config.icon || "🐾";
+      
+      const phrases = [
+        "Hôm nay bồ học hành thế nào rồi?",
+        "Tớ luôn ở đây cổ vũ bồ nè! ✨",
+        "Mệt chưa? Nghỉ tay tí hông? ❤️",
+        "Bồ là người chăm chỉ nhất tớ từng thấy!",
+        "Dậy sớm học bài cùng tớ hông? ☀️",
+        "Có tớ ở đây, mọi bài tập đều dễ ẹc! 💪"
+      ];
+      document.getElementById("interactPetQuote").innerText = `"${phrases[Math.floor(Math.random() * phrases.length)]}"`;
+      
+      // Update toggle buttons for movement
+      const isStaying = getCleanLocalStorage("pet_stay_still") === "true";
+      updatePetControlButtons(isStaying);
+      
+      // Update frequency
+      const freq = getCleanLocalStorage("pet_chatter_freq") || "1";
+      document.getElementById("petChatterFreq").value = freq;
+      
+      // Update auto game suggest checkbox
+      const autoGames = getCleanLocalStorage("pet_auto_game_suggest") === "true";
+      const autoGamesCheckbox = document.getElementById("petAutoGameSuggest");
+      if (autoGamesCheckbox) autoGamesCheckbox.checked = autoGames;
+      
+      // Update Focus UI
+      const focusIdle = document.getElementById("focusUI_idle");
+      const focusActive = document.getElementById("focusUI_active");
+      if (this.focusSession) {
+        focusIdle.style.display = "none";
+        focusActive.style.display = "block";
+      } else {
+        focusIdle.style.display = "block";
+        focusActive.style.display = "none";
+      }
+
+      popup.style.display = "flex";
+    }
+
+    // Still play an animation
+    const animType = Math.random();
+    if (animType < 0.6) {
+      this.isJumping = true;
+      this.jumpStartTime = performance.now();
+      this.jumpPower = 15 + Math.random() * 10;
+    } else {
+      this.emitHearts();
+    }
+  }
+
+  startSpin() {
+    this.isSpinning = true;
+    this.spinStartTime = performance.now();
+    setTimeout(() => { this.isSpinning = false; }, 600);
+  }
+
+  emitHearts() {
+    for (let i = 0; i < 5; i++) {
+      const heart = document.createElement("div");
+      heart.innerText = ["❤️", "💖", "✨", "⭐", "🌈"][Math.floor(Math.random() * 5)];
+      heart.style.cssText = `position: absolute; left: 50%; bottom: 40px; font-size: 20px; transition: all 1s ease-out; opacity: 1; transform: translate(-50%, 0);`;
+      this.effectLayer.appendChild(heart);
+      
+      const angle = (Math.random() - 0.5) * 100;
+      const distance = 50 + Math.random() * 50;
+      
+      requestAnimationFrame(() => {
+        heart.style.transform = `translate(calc(-50% + ${angle}px), -${distance}px)`;
+        heart.style.opacity = "0";
+      });
+      
+      setTimeout(() => heart.remove(), 1000);
+    }
+  }
+
+  updateTarget() {
+    const margin = 100;
+    this.targetX = margin + Math.random() * (window.innerWidth - margin * 2);
+    this.targetY = window.innerHeight - 80 - Math.random() * 50;
+    this.walking = true;
+  }
+
+  update(now, dt) {
+    if (!this.lastStayCheck || now - this.lastStayCheck > 1000) {
+      this.lastStayCheck = now;
+      this.cachedIsStaying = getCleanLocalStorage("pet_stay_still") === "true";
+    }
+    const isStaying = this.cachedIsStaying;
+
+    // Update focus timer if active
+    if (this.focusSession) {
+      this.updateFocusTimer();
+    }
+
+    // Tối ưu: Nếu đang đứng yên và không có game/focus thì không cần tính toán di chuyển phức tạp
+    if (isStaying && !this.focusSession && !this.isJumping && !this.isDragging) {
+       this.container.style.transform = `translate3d(${this.posX}px, ${this.posY}px, 0)`;
+       return;
+    }
+
+    // Optimized: Remove Collision Avoidance & Social Check O(N^2) for many pets lag reduction
+    // Only keep screen boundary clamping
+    const margin = 60;
+    this.posX = Math.max(margin, Math.min(window.innerWidth - margin, this.posX));
+    this.posY = Math.max(margin, Math.min(window.innerHeight - margin, this.posY));
+
+    if (this.isJumping) {
+      const elapsed = now - this.jumpStartTime;
+      const power = this.jumpPower || 15;
+      if (elapsed < 300) {
+        this.jumpY = Math.sin((elapsed / 300) * Math.PI) * power;
+      } else {
+        this.jumpY = 0;
+        this.isJumping = false;
+        this.jumpPower = 15;
+      }
+    }
+
+    let extraTransform = "";
+    if (this.isSpinning) {
+      const spinTime = now - this.spinStartTime;
+      const rotation = (spinTime / 600) * 360;
+      extraTransform = ` rotate(${rotation}deg)`;
+    }
+
+    // Night time sleepiness
+    if (this.walking && !isStaying) {
+      const hour = new Date().getHours();
+      if ((hour >= 23 || hour < 5) && !this.isSleeping) {
+        if (Math.random() < 0.005) {
+           this.isSleeping = true;
+           this.walking = false;
+           this.say("Tớ đi ngủ đây... 💤", 10000);
+           this.idleTimer = 30000;
+        }
+      }
+
+      // Periodic chatter while walking
+      if (Math.random() < 0.0004) {
+        const chatter = [
+          "Học tốt nha bạn hiền! 📚",
+          "Trời đẹp, cố lên nà! 🌤️",
+          "Tớ canh cho bạn học nè! ✨",
+          "Đói chưa? Ăn gì đi nhé! 🍎",
+          "Cố lên, tớ tin bạn! 💪"
+        ];
+        this.say(chatter[Math.floor(Math.random() * chatter.length)]);
+      }
+
+      if (Math.random() < 0.002) { 
+        this.walking = false; 
+        this.idleTimer = Math.random() * 3000 + 2000; 
+        if (Math.random() < 0.05) this.interact(false);
+      }
+      
+      let dx = this.targetX - this.posX;
+      let dy = this.targetY - this.posY;
+      let dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist < 5) {
+        this.walking = false;
+        if (this.isGoingToGames) {
+          this.isGoingToGames = false;
+          this.idleTimer = 5000;
+          if (typeof toggleGameBox === 'function') {
+            const gb = document.getElementById("floatingGame");
+            if (!gb || gb.style.display === "none") toggleGameBox();
+          }
+          this.say("Xả stress chút nha! 🎮");
+        } else {
+          this.idleTimer = Math.random() * 4000 + 2000;
+        }
+      } else {
+        let speed = this.isGoingToGames ? 3.5 : 0.8;
+        let adjustedSpeed = speed * (dt / 16);
+        this.posX += (dx / dist) * adjustedSpeed;
+        this.posY += (dy / dist) * adjustedSpeed;
+      }
+      
+      this.direction = dx > 0 ? -1 : 1;
+      let hopSpeed = this.isGoingToGames ? 80 : 150;
+      let hopHeight = this.isGoingToGames ? 12 : 8;
+      let hop = Math.abs(Math.sin(now / hopSpeed)) * hopHeight; 
+      let wobble = Math.sin(now / hopSpeed) * 8; // Lắc lư nhẹ khi đi
+      
+      this.sprite.style.transform = `translate3d(0, -${hop + this.jumpY}px, 0) scaleX(${this.direction}) rotate(${wobble}deg) ${extraTransform}`;
+      
+    } else if (this.isDragging) {
+      // Instant response for dragging
+      this.posX = this.mouseX;
+      this.posY = this.mouseY;
+      let dragWobble = (this.mouseX - this.posX) * 0.5; // Tilt based on drag
+      this.sprite.style.transform = `translate3d(0, -${this.jumpY}px, 0) scaleX(${this.direction}) rotate(${dragWobble}deg) ${extraTransform}`;
+    } else {
+      // Periodic chatter even if staying still
+      if (Math.random() < 0.0004) {
+        const hour = new Date().getHours();
+        const hourGreetings = this.getTimeBasedGreeting();
+        this.say(hourGreetings[Math.floor(Math.random() * hourGreetings.length)]);
+      }
+
+      this.idleTimer -= dt;
+      let breath = Math.abs(Math.sin(now / 800)) * (this.isSleeping ? 0.02 : 0.06);
+      let breathX = Math.abs(Math.sin(now / 800)) * (this.isSleeping ? 0.01 : 0.03);
+      this.sprite.style.transform = `translate3d(0, -${this.jumpY}px, 0) scaleX(${this.direction > 0 ? (1 + breathX) : -(1 + breathX)}) scaleY(${1 - breath}) ${extraTransform}`;
+      
+      if (!isStaying && this.idleTimer <= 0 && this.bubble.style.opacity == "0") {
+        this.isSleeping = false;
+        this.walking = true;
+        this.updateTarget();
+      }
+    }
+
+    // Boundary Clamping
+    this.posX = Math.max(10, Math.min(window.innerWidth - 80, this.posX));
+    this.posY = Math.max(80, Math.min(window.innerHeight - 80, this.posY));
+
+    // Optimized Style Updates: Use translate3d for GPU acceleration
+    this.container.style.transform = `translate3d(${this.posX}px, ${this.posY}px, 0)`;
+    
+    // Only update z-index if floor of posY changes to reduce layout triggers
+    const newZIndex = Math.floor(this.posY) + 100000;
+    if (this.currentZIndex !== newZIndex) {
+      this.container.style.zIndex = newZIndex;
+      this.currentZIndex = newZIndex;
+    }
+  }
+
+  destroy() {
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+  }
+}
+
+let lastPetFrameTime = performance.now();
+
+function animatePet() {
+  requestAnimationFrame(animatePet);
+  const now = performance.now();
+  const dt = now - lastPetFrameTime;
+  if (dt < 16) return;
+  lastPetFrameTime = now;
+  
+  activePets.forEach(pet => pet.update(now, dt));
+}
+
+function toggleCustomPetPopup() {
+  const popup = document.getElementById("customPetPopup");
+  if (popup.style.display === "none" || popup.style.display === "") {
+    popup.style.display = "flex";
+    setTimeout(() => {
+      popup.style.opacity = "1";
+    }, 10);
+  } else {
+    popup.style.opacity = "0";
+    setTimeout(() => {
+      popup.style.display = "none";
+      document.getElementById("customPetFile").value = "";
+      document.getElementById("customPetUrl").value = "";
+    }, 300);
+  }
+}
+
+function applyCustomPetImage() {
+  if (isBuyingPet) {
+    showToast('Đang xử lý giao dịch, vui lòng chờ!', 'info');
+    return;
+  }
+
+  const urlInput = document.getElementById("customPetUrl").value.trim();
+  const fileInput = document.getElementById("customPetFile");
+  const cost = 5000;
+
+  if (currentUserPoints < cost) {
+    showToast('Bạn không đủ 5.000 🪙 để tạo thú cưng tuỳ chỉnh.', 'error');
+    triggerStudentReliefIfEligible();
+    return;
+  }
+
+  const processAndSave = (imgUrl) => {
+    askUseCoin(`Bạn có muốn dùng ${cost} 🪙 để tạo thú cưng tuỳ chỉnh này không?`, () => {
+      isBuyingPet = true;
+      showGlobalSpinner("Đang lưu hình thú cưng...");
+
+      let originalPointsBuyCustom = currentUserPoints;
+      let optimisticallyDeductedBuyCustom = false;
+      if (typeof currentUserPoints !== 'undefined' && typeof updatePointDisplay === 'function') {
+          updatePointDisplay(Math.max(0, currentUserPoints - cost));
+          optimisticallyDeductedBuyCustom = true;
+      }
+
+      google.script.run.withSuccessHandler(newTotal => {
+        isBuyingPet = false;
+        hideGlobalSpinner();
+        if (newTotal === false) {
+          if (optimisticallyDeductedBuyCustom) updatePointDisplay(originalPointsBuyCustom); // Revert
+          showToast('Bạn không đủ điểm hoặc có lỗi xảy ra', 'error');
+          return;
+        }
+        
+        updatePointDisplay(newTotal);
+        
+        try {
+          let ownedCustomPets = []; try { ownedCustomPets = JSON.parse(getCleanLocalStorage("owned_custom_pets") || "[]"); } catch(e) {}
+          const newId = "custom_" + Date.now();
+          ownedCustomPets.push({ id: newId, url: imgUrl });
+          localStorage.setItem("owned_custom_pets", JSON.stringify(ownedCustomPets));
+          
+          let spawnedIds = (() => { try { return JSON.parse(getCleanLocalStorage("spawned_pet_ids") || "[]"); } catch(e) { return []; } })();
+          spawnedIds.push(newId);
+          localStorage.setItem("spawned_pet_ids", JSON.stringify(spawnedIds));
+          localStorage.setItem('pet_turned_off', 'false');
+          
+          toggleCustomPetPopup();
+          renderPetGrid();
+          initPet();
+          showToast('Tạo thú cưng thành công!', 'success');
+        } catch(err) {
+          showToast('Lỗi lưu trữ! Ảnh quá lớn.', 'error');
+        }
+      }).withFailureHandler(err => {
+        if (optimisticallyDeductedBuyCustom) updatePointDisplay(originalPointsBuyCustom); // Revert
+        isBuyingPet = false;
+        hideGlobalSpinner();
+        showToast("Lỗi kết nối", "error");
+      }).deductUserPoints(cost, "Tạo thú cưng tự tạo");
+    });
+  };
+
+  if (fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+        const max_dim = 200; // Small size for pets
+        
+        if (width > height) {
+          if (width > max_dim) {
+            height *= max_dim / width;
+            width = max_dim;
+          }
+        } else {
+          if (height > max_dim) {
+            width *= max_dim / height;
+            height = max_dim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Use image/png to preserve transparency
+        const dataUrl = canvas.toDataURL("image/png");
+        processAndSave(dataUrl);
+      }
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else if (urlInput !== "") {
+    processAndSave(urlInput);
+  } else {
+    showToast('Vui lòng chọn ảnh hoặc nhập URL', 'error');
+  }
+}
+
+function togglePetPopup() {
+  const popup = document.getElementById("petPopup");
+  if (popup.style.display === "none" || popup.style.display === "") {
+    switchPetTab('adopt');
+    updatePetStayUI();
+    popup.style.display = "flex";
+    setTimeout(() => {
+      popup.style.opacity = "1";
+      const contentBox = popup.children[0];
+      if (contentBox) contentBox.style.transform = "scale(1) translateY(0)";
+    }, 10);
+  } else {
+    popup.style.opacity = "0";
+    const contentBox = popup.children[0];
+    if (contentBox) contentBox.style.transform = "scale(0.95) translateY(10px)";
+    setTimeout(() => {
+      popup.style.display = "none";
+    }, 300);
+  }
+}
+
+function switchPetTab(tab) {
+  const adoptBtn = document.getElementById("petTabBtn_adopt");
+  const extraBtn = document.getElementById("petTabBtn_extra");
+  const adoptContent = document.getElementById("petTabContent_adopt");
+  const extraContent = document.getElementById("petTabContent_extra");
+  
+  if (tab === 'adopt') {
+    if (adoptBtn) {
+      adoptBtn.classList.add("active");
+      adoptBtn.style.color = "";
+      adoptBtn.style.borderBottomColor = "";
+    }
+    if (extraBtn) {
+      extraBtn.classList.remove("active");
+      extraBtn.style.color = "";
+      extraBtn.style.borderBottomColor = "";
+    }
+    if (adoptContent) adoptContent.style.display = "block";
+    if (extraContent) extraContent.style.display = "none";
+    renderPetGrid();
+  } else {
+    if (adoptBtn) {
+      adoptBtn.classList.remove("active");
+      adoptBtn.style.color = "";
+      adoptBtn.style.borderBottomColor = "";
+    }
+    if (extraBtn) {
+      extraBtn.classList.add("active");
+      extraBtn.style.color = "";
+      extraBtn.style.borderBottomColor = "";
+    }
+    if (adoptContent) adoptContent.style.display = "none";
+    if (extraContent) extraContent.style.display = "block";
+    populateTargetPetSelect();
+    renderAccessoryGrid();
+  }
+}
+
+function populateTargetPetSelect() {
+  const select = document.getElementById("accTargetPetSelect");
+  if (!select) return;
+  
+  select.innerHTML = "";
+  let ownedPets = [];
+  try {
+    ownedPets = JSON.parse(getCleanLocalStorage("owned_pets") || '["pet_chick"]');
+  } catch(e) {
+    ownedPets = ["pet_chick"];
+  }
+  if (!Array.isArray(ownedPets) || ownedPets.length === 0) {
+    ownedPets = ["pet_chick"];
+  }
+  if (!ownedPets.includes("pet_chick")) {
+    ownedPets.unshift("pet_chick");
+  }
+  let ownedCustomPets = []; try { ownedCustomPets = JSON.parse(getCleanLocalStorage("owned_custom_pets") || "[]"); } catch(e) {}
+  
+  let hasPets = false;
+  
+  // Default pets
+  PET_CONFIG.forEach(pet => {
+    if (ownedPets.includes(pet.id)) {
+      const customName = getCleanLocalStorage(`pet_name_${pet.id}`) || pet.name;
+      const opt = document.createElement("option");
+      opt.value = pet.id;
+      opt.textContent = `🐾 ${customName}`;
+      select.appendChild(opt);
+      hasPets = true;
+    }
+  });
+  
+  // Custom pets
+  ownedCustomPets.forEach(pet => {
+    const customName = getCleanLocalStorage(`pet_name_${pet.id}`) || "Thú Cưng Riêng";
+    const opt = document.createElement("option");
+    opt.value = pet.id;
+    opt.textContent = `✨ ${customName}`;
+    select.appendChild(opt);
+    hasPets = true;
+  });
+  
+  if (!hasPets) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Bạn chưa nuôi Pet nào 😢";
+    select.appendChild(opt);
+  }
+}
+
+function renderAccessoryGrid() {
+  const grid = document.getElementById("petAccessoryGrid");
+  const select = document.getElementById("accTargetPetSelect");
+  if (!grid || !select) return;
+  
+  grid.innerHTML = "";
+  const petId = select.value;
+  if (!petId) {
+    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:#64748b; font-weight:600; font-size:0.9rem;">Vui lòng nhận nuôi ít nhất một Thú Cưng để sắm phụ kiện!</div>`;
+    return;
+  }
+  
+  const ownedAccessories = (() => { try { return JSON.parse(getCleanLocalStorage("owned_accessories") || "[]"); } catch(e) { return []; } })();
+  const equippedAccId = getCleanLocalStorage(`pet_accessory_${petId}`);
+  
+  PET_ACCESSORIES.forEach(acc => {
+    const card = document.createElement("div");
+    card.className = "pet-card-item";
+    
+    const isOwned = ownedAccessories.includes(acc.id);
+    const isEquipped = (equippedAccId === acc.id);
+    
+    let btnHtml = "";
+    if (!isOwned) {
+      btnHtml = `<button onclick="buyAccessory('${acc.id}', ${acc.cost})" class="pet-card-btn-buy">Mua (${acc.cost} 🪙)</button>`;
+    } else {
+      if (isEquipped) {
+        card.classList.add("equipped");
+        btnHtml = `<button onclick="unequipAccessory('${acc.id}', '${petId}')" class="pet-card-btn-unequip">Tháo ra</button>`;
+      } else {
+        btnHtml = `<button onclick="equipAccessory('${acc.id}', '${petId}')" class="pet-card-btn-action">Trang bị</button>`;
+      }
+    }
+    
+    card.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div class="pet-avatar-wrapper">${acc.icon}</div>
+        <div class="pet-card-name">${acc.name}</div>
+        <div class="pet-card-desc">${acc.desc}</div>
+      </div>
+      <div style="margin-top: 12px; width: 100%;">
+        ${btnHtml}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+let isBuyingAccessory = false;
+
+function buyAccessory(accId, cost) {
+  if (isBuyingAccessory) return;
+  
+  if (currentUserPoints < cost) {
+    showToast('Bạn không đủ điểm để mua phụ kiện này.', 'error');
+    return;
+  }
+  
+  const acc = PET_ACCESSORIES.find(a => a.id === accId);
+  askUseCoin(`Bạn có muốn dùng ${cost} 🪙 để mua phụ kiện ${acc.name} không?`, () => {
+    isBuyingAccessory = true;
+    showGlobalSpinner("Đang xử lý mua phụ kiện...");
+
+    let originalPointsBuyAcc = currentUserPoints;
+    let optimisticallyDeductedBuyAcc = false;
+    if (typeof currentUserPoints !== 'undefined' && typeof updatePointDisplay === 'function') {
+        updatePointDisplay(Math.max(0, currentUserPoints - cost));
+        optimisticallyDeductedBuyAcc = true;
+    }
+
+    google.script.run.withSuccessHandler(newTotal => {
+      isBuyingAccessory = false;
+      hideGlobalSpinner();
+      if (newTotal === false) {
+        if (optimisticallyDeductedBuyAcc) updatePointDisplay(originalPointsBuyAcc);
+        showToast('Bạn không đủ điểm hoặc có lỗi xảy ra', 'error');
+        return;
+      }
+      
+      updatePointDisplay(newTotal);
+      
+      let owned = (() => { try { return JSON.parse(getCleanLocalStorage("owned_accessories") || "[]"); } catch(e) { return []; } })();
+      if (!owned.includes(accId)) owned.push(accId);
+      localStorage.setItem("owned_accessories", JSON.stringify(owned));
+      
+      showToast('Mua phụ kiện thành công!', 'success');
+      renderAccessoryGrid();
+      
+    }).withFailureHandler(() => {
+      if (optimisticallyDeductedBuyAcc) updatePointDisplay(originalPointsBuyAcc);
+      isBuyingAccessory = false;
+      hideGlobalSpinner();
+      showToast('Lỗi kết nối máy chủ!', 'error');
+    }).deductUserPoints(cost, `Mua phụ kiện ${acc.name}`);
+  });
+}
+
+function equipAccessory(accId, petId) {
+  localStorage.setItem(`pet_accessory_${petId}`, accId);
+  
+  activePets.forEach(p => {
+    if (p.id === petId || p.config.id === petId) {
+      p.updateAccessory();
+    }
+  });
+  
+  showToast('Đã trang bị phụ kiện!', 'success');
+  renderAccessoryGrid();
+}
+
+function unequipAccessory(accId, petId) {
+  localStorage.removeItem(`pet_accessory_${petId}`);
+  
+  activePets.forEach(p => {
+    if (p.id === petId || p.config.id === petId) {
+      p.updateAccessory();
+    }
+  });
+  
+  showToast('Đã tháo phụ kiện!', 'success');
+  renderAccessoryGrid();
+}
+
+function renderPetGrid() {
+  const grid = document.getElementById("petGrid");
+  let ownedPets = [];
+  try {
+    ownedPets = JSON.parse(getCleanLocalStorage("owned_pets") || '["pet_chick"]');
+  } catch(e) {
+    ownedPets = ["pet_chick"];
+  }
+  if (!Array.isArray(ownedPets) || ownedPets.length === 0) {
+    ownedPets = ["pet_chick"];
+  }
+  if (!ownedPets.includes("pet_chick")) {
+    ownedPets.unshift("pet_chick");
+  }
+  
+  let spawnedIds = []; try { spawnedIds = JSON.parse(getCleanLocalStorage("spawned_pet_ids") || "[]"); } catch(e) {}
+  let ownedCustomPets = []; try { ownedCustomPets = JSON.parse(getCleanLocalStorage("owned_custom_pets") || "[]"); } catch(e) {}
+  
+  grid.innerHTML = "";
+  
+  // Render default pets
+  PET_CONFIG.forEach(pet => {
+    let card = document.createElement("div");
+    card.className = "pet-card-item";
+    
+    let isOwned = ownedPets.includes(pet.id);
+    let isSpawned = spawnedIds.includes(pet.id);
+    
+    let btnHtml = "";
+    if (!isOwned) {
+      btnHtml = `<button onclick="buyPet('${pet.id}', ${pet.cost})" class="pet-card-btn-buy">Mua (${pet.cost} 🪙)</button>`;
+    } else {
+      const customName = getCleanLocalStorage(`pet_name_${pet.id}`) || pet.name;
+      const nameTagHtml = `<div style="font-size: 11.5px; font-weight: 800; color: #f59e0b; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="renamePet('${pet.id}')">✏️ ${customName}</div>`;
+      
+      if (isSpawned) {
+        card.classList.add("spawned");
+        btnHtml = `
+          ${nameTagHtml}
+          <button onclick="togglePetSpawn('${pet.id}')" class="pet-card-btn-spawned">Thu hồi</button>
+        `;
+      } else {
+        btnHtml = `
+          ${nameTagHtml}
+          <button onclick="togglePetSpawn('${pet.id}')" class="pet-card-btn-action">Bố trí</button>
+        `;
+      }
+    }
+    
+    card.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div class="pet-avatar-wrapper">${pet.icon}</div>
+        <div class="pet-card-name">${pet.name}</div>
+        <div class="pet-card-desc">${pet.desc}</div>
+      </div>
+      <div style="margin-top: 12px; width: 100%;">
+        ${btnHtml}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Render custom pets
+  ownedCustomPets.forEach(pet => {
+    let card = document.createElement("div");
+    card.className = "pet-card-item";
+    card.style.borderColor = "#a855f7";
+    
+    let isSpawned = spawnedIds.includes(pet.id);
+    let btnHtml = "";
+    const customName = getCleanLocalStorage(`pet_name_${pet.id}`) || "Thú Cưng Riêng";
+    const nameTagHtml = `<div style="font-size: 11.5px; font-weight: 800; color: #a855f7; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="renamePet('${pet.id}')">✏️ ${customName}</div>`;
+
+    if (isSpawned) {
+        card.style.boxShadow = "0 8px 16px rgba(168, 85, 247, 0.12)";
+        btnHtml = `
+          ${nameTagHtml}
+          <button onclick="togglePetSpawn('${pet.id}')" class="pet-card-btn-spawned">Thu hồi</button>
+        `;
+    } else {
+        btnHtml = `
+          ${nameTagHtml}
+          <button onclick="togglePetSpawn('${pet.id}')" class="pet-card-btn-action custom-pet-btn-adopt-override">Bố trí</button>
+        `;
+    }
+
+    card.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div style="width: 48px; height: 48px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 4px; display: flex; align-items: center; justify-content: center;" class="custom-pet-img-container-override">
+          <img src="${pet.url}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+        <div class="pet-card-name">Tùy Chỉnh</div>
+        <div class="pet-card-desc">Đồ custom giới hạn!</div>
+      </div>
+      <div style="margin-top: 12px; width: 100%;">
+        ${btnHtml}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renamePet(petId) {
+  currentRenamingPetId = petId;
+  const currentName = getCleanLocalStorage(`pet_name_${petId}`) ||  (petId.startsWith("custom_") ? "Tùy Chỉnh" : (PET_CONFIG.find(p => p.id === petId)?.name || "Pet"));
+  const input = document.getElementById("renamePetInput");
+  const modal = document.getElementById("renamePetModal");
+  if (!input || !modal) return;
+  
+  input.value = currentName;
+  modal.style.display = "flex";
+  setTimeout(() => {
+    modal.style.opacity = "1";
+    modal.firstElementChild.style.transform = "scale(1) translateY(0)";
+    input.focus();
+    input.select();
+  }, 10);
+}
+
+function closeRenameModal() {
+  const modal = document.getElementById("renamePetModal");
+  if (!modal) return;
+  modal.style.opacity = "0";
+  modal.firstElementChild.style.transform = "scale(0.9) translateY(10px)";
+  setTimeout(() => { modal.style.display = "none"; }, 300);
+}
+
+function submitRenamePet() {
+  const input = document.getElementById("renamePetInput");
+  if (!input || !currentRenamingPetId) return;
+  
+  const newName = input.value.trim();
+  if (newName !== "") {
+    localStorage.setItem(`pet_name_${currentRenamingPetId}`, newName);
+    const activeInstance = activePets.find(p => p.id === currentRenamingPetId);
+    if (activeInstance) activeInstance.rename(newName);
+    renderPetGrid();
+    showToast("Đã đổi tên thú cưng", "success");
+    closeRenameModal();
+  }
+}
+
+let currentRenamingPetId = null;
+
+function togglePetSpawn(petId) {
+    let spawnedIds = (() => { try { return JSON.parse(getCleanLocalStorage("spawned_pet_ids") || "[]"); } catch(e) { return []; } })();
+    if (spawnedIds.includes(petId)) {
+        spawnedIds = spawnedIds.filter(id => id !== petId);
+        // Find and destroy the pet instance
+        const idx = activePets.findIndex(p => p.id === petId);
+        if (idx !== -1) {
+            activePets[idx].destroy();
+            activePets.splice(idx, 1);
+        }
+    } else {
+        spawnedIds.push(petId);
+        localStorage.setItem("spawned_pet_ids", JSON.stringify(spawnedIds));
+        localStorage.setItem("pet_turned_off", "false");
+        
+        // Spawn the new pet
+        let ownedCustomPets = []; try { ownedCustomPets = JSON.parse(getCleanLocalStorage("owned_custom_pets") || "[]"); } catch(e) {}
+        let petConfig;
+        if (petId.startsWith("custom_")) {
+          const customPet = ownedCustomPets.find(p => p.id === petId);
+          if (customPet) petConfig = { ...customPet, isCustom: true };
+        } else {
+          petConfig = PET_CONFIG.find(p => p.id === petId);
+        }
+        
+        if (petConfig) {
+          const newPet = new ActivePet(petConfig, petId);
+          
+          // Đồng bộ nếu đang trong phiên tập trung
+          const existingSession = activePets.find(p => p.focusSession)?.focusSession;
+          if (existingSession) {
+            newPet.focusSession = { ...existingSession };
+            newPet.container.classList.add("pet-focus-mode");
+          }
+
+          activePets.push(newPet);
+          if (!existingSession) newPet.say("Tui tới rồi đây! ✨");
+        }
+    }
+    localStorage.setItem("spawned_pet_ids", JSON.stringify(spawnedIds));
+    renderPetGrid();
+    showToast("Đã cập nhật trạng thái thú cưng", "success");
+}
+
+function selectPet(petId) {
+  togglePetSpawn(petId);
+}
+
+let isBuyingPet = false;
+
+function buyPet(petId, cost) {
+  if (isBuyingPet) {
+    showToast('Đang xử lý giao dịch, vui lòng chờ!', 'info');
+    return;
+  }
+
+  if (cost === 0) {
+    let owned = JSON.parse(getCleanLocalStorage("owned_pets") || '["pet_chick"]');
+    if(!owned.includes(petId)) owned.push(petId);
+    localStorage.setItem("owned_pets", JSON.stringify(owned));
+    togglePetSpawn(petId);
+    return;
+  }
+  
+  if (currentUserPoints < cost) {
+    showToast('Bạn không đủ điểm để mua thú cưng này.', 'error');
+    triggerStudentReliefIfEligible();
+    return;
+  }
+  
+  askUseCoin(`Bạn có muốn dùng ${cost} 🪙 để mua bé ${PET_CONFIG.find(p=>p.id===petId).name} không?`, () => {
+    isBuyingPet = true;
+    showGlobalSpinner("Đang mua thú cưng...");
+
+    let originalPointsBuyPet = currentUserPoints;
+    let optimisticallyDeductedBuyPet = false;
+    if (typeof currentUserPoints !== 'undefined' && typeof updatePointDisplay === 'function') {
+        updatePointDisplay(Math.max(0, currentUserPoints - cost));
+        optimisticallyDeductedBuyPet = true;
+    }
+
+    google.script.run.withSuccessHandler(newTotal => {
+      isBuyingPet = false;
+      hideGlobalSpinner();
+      if (newTotal === false) {
+        if (optimisticallyDeductedBuyPet) updatePointDisplay(originalPointsBuyPet); // Revert
+        showToast('Bạn không đủ điểm hoặc có lỗi xảy ra', 'error');
+        return;
+      }
+      
+      updatePointDisplay(newTotal);
+      
+      let owned = JSON.parse(getCleanLocalStorage("owned_pets") || '["pet_chick"]');
+      if(!owned.includes(petId)) owned.push(petId);
+      localStorage.setItem("owned_pets", JSON.stringify(owned));
+      localStorage.setItem('pet_turned_off', 'false');
+      
+      togglePetSpawn(petId);
+      showToast('Mua thú cưng thành công!', 'success');
+      
+    }).withFailureHandler(err => {
+      if (optimisticallyDeductedBuyPet) updatePointDisplay(originalPointsBuyPet); // Revert
+      isBuyingPet = false;
+      hideGlobalSpinner();
+      showToast("Lỗi kết nối", "error");
+    }).deductUserPoints(cost, "Mua thú cưng Store");
+  });
+}
+
+function updatePetStayUI() {
+  // Empty - UI removed
+}
+
+function turnOffPet() {
+  localStorage.setItem('pet_turned_off', 'true');
+  const popup = document.getElementById("petPopup");
+  if (popup && popup.style.display !== "none") {
+    togglePetPopup();
+  }
+  
+  if (typeof resetFocusUI === "function") resetFocusUI();
+
+  activePets.forEach(p => p.destroy());
+  activePets = [];
+  localStorage.setItem("spawned_pet_ids", "[]");
+  
+  showToast("Đã tắt tất cả thú cưng", "success");
+}
+
+// --- GLOBAL FOCUS MODE WRAPPERS ---
+function triggerPetFocus(durationOverride) {
+  if (activePets.length === 0) {
+    showToast("⚠️ Bạn cần có thú cưng để bắt đầu tập trung!", "warning");
+    return;
+  }
+  
+  const duration = durationOverride || parseInt(document.getElementById("focusDurationSelect").value);
+  if (isNaN(duration)) return;
+
+  activePets.forEach((pet, index) => {
+    pet.startFocusMode(duration, index > 0);
+  });
+  
+  // Cập nhật UI ở cửa sổ chính
+  const startBtn = document.getElementById("startFocusBtn");
+  const stopBtn = document.getElementById("stopFocusBtn");
+  const select = document.getElementById("focusDurationSelect");
+  
+  if (startBtn) startBtn.style.display = "none";
+  if (stopBtn) stopBtn.style.display = "block";
+  if (select) {
+    select.value = duration;
+    select.disabled = true;
+  }
+  
+  // Đóng các popup liên quan
+  const interactPopup = document.getElementById("petInteractionPopup");
+  if (interactPopup) interactPopup.style.display = "none";
+  
+  // Không gọi togglePetPopup() ở đây để tránh làm phiền người dùng
+}
+
+function cancelPetFocus() {
+  activePets.forEach((pet) => {
+    pet.cancelFocusMode();
+  });
+  localStorage.setItem("pet_stay_still", "false");
+  updatePetStayUI();
+  resetFocusUI();
+}
+
+function resetFocusUI() {
+  const startBtn = document.getElementById("startFocusBtn");
+  const stopBtn = document.getElementById("stopFocusBtn");
+  const select = document.getElementById("focusDurationSelect");
+  if (startBtn) startBtn.style.display = "block";
+  if (stopBtn) stopBtn.style.display = "none";
+  if (select) select.disabled = false;
+
+  // Đóng popup interaction
+  const interactPopup = document.getElementById("petInteractionPopup");
+  if (interactPopup) interactPopup.style.display = "none";
+
+  // Sync interaction popup UI
+  const focusIdle = document.getElementById("focusUI_idle");
+  const focusActive = document.getElementById("focusUI_active");
+  if (focusIdle) focusIdle.style.display = "block";
+  if (focusActive) focusActive.style.display = "none";
+}
+
+// --- GLOBAL PET SETTINGS ---
+function setPetMovement(shouldMove) {
+  // Nếu đang trong chế độ tập trung, không cho phép di chuyển
+  const isAnyInFocus = activePets.some(p => p.focusSession);
+  if (isAnyInFocus && shouldMove) {
+    showToast("⚠️ Đang trong chế độ tập trung, thú cưng phải đứng yên!", "warning");
+    return;
+  }
+
+  localStorage.setItem("pet_stay_still", (!shouldMove).toString());
+  updatePetControlButtons(!shouldMove);
+  updatePetStayUI();
+}
+
+function updatePetControlButtons(isStaying) {
+  const moveBtn = document.getElementById("petMoveBtn");
+  const stayBtn = document.getElementById("petStayBtn");
+  if (!moveBtn || !stayBtn) return;
+
+  const isDark = document.body.classList.contains("dark-mode");
+  const inactiveBg = isDark ? "#1e293b" : "white";
+  const inactiveColor = isDark ? "#cbd5e1" : "#475569";
+  const inactiveBorder = isDark ? "#334155" : "#e2e8f0";
+
+  if (isStaying) {
+    stayBtn.style.background = "#3b82f6";
+    stayBtn.style.color = "white";
+    stayBtn.style.borderColor = "#3b82f6";
+    moveBtn.style.background = inactiveBg;
+    moveBtn.style.color = inactiveColor;
+    moveBtn.style.borderColor = inactiveBorder;
+  } else {
+    moveBtn.style.background = "#3b82f6";
+    moveBtn.style.color = "white";
+    moveBtn.style.borderColor = "#3b82f6";
+    stayBtn.style.background = inactiveBg;
+    stayBtn.style.color = inactiveColor;
+    stayBtn.style.borderColor = inactiveBorder;
+  }
+}
+
+function setPetChatterFreq(val) {
+  localStorage.setItem("pet_chatter_freq", val);
+  showToast("Đã cập nhật tần suất nhắc nhở", "success");
+}
+
+function setPetAutoGameSuggest(val) {
+  localStorage.setItem("pet_auto_game_suggest", val ? "true" : "false");
+  showToast("Đã cập nhật gợi ý chơi game", "success");
+}
+
+function triggerPetFocusFromInteraction() {
+  if (activePets.length === 0) return;
+  const duration = parseInt(document.getElementById("interactFocusDuration").value);
+  
+  // Sync global select if needed (optional)
+  const mainSelect = document.getElementById("focusDurationSelect");
+  if (mainSelect) mainSelect.value = duration;
+  
+  triggerPetFocus(duration);
+  
+  // Update local UI
+  document.getElementById("focusUI_idle").style.display = "none";
+  document.getElementById("focusUI_active").style.display = "block";
+}
+
+function initPet() {
+  if (!window.isLoggedIn) {
+    activePets.forEach(p => p.destroy());
+    activePets = [];
+    return;
+  }
+  const isTurnedOff = getCleanLocalStorage("pet_turned_off") === "true";
+  if (isTurnedOff) {
+    activePets.forEach(p => p.destroy());
+    activePets = [];
+    return;
+  }
+
+  // Clear existing ones first
+  activePets.forEach(p => p.destroy());
+  activePets = [];
+
+  let spawnedIds = (() => { try { return JSON.parse(getCleanLocalStorage("spawned_pet_ids") || "[]"); } catch(e) { return []; } })();
+  
+  // If nothing spawned yet but not turned off, spawn the default or previously selected one
+  if (spawnedIds.length === 0) {
+    const selectedPet = getCleanLocalStorage("selected_pet") || "pet_chick";
+    spawnedIds = [selectedPet];
+    localStorage.setItem("spawned_pet_ids", JSON.stringify(spawnedIds));
+  }
+
+  let ownedCustomPets = []; try { ownedCustomPets = JSON.parse(getCleanLocalStorage("owned_custom_pets") || "[]"); } catch(e) {}
+
+  spawnedIds.forEach(id => {
+    let petConfig;
+    if (id.startsWith("custom_")) {
+      const customPet = ownedCustomPets.find(p => p.id === id);
+      if (customPet) {
+        petConfig = { ...customPet, isCustom: true };
+      }
+    } else {
+      petConfig = PET_CONFIG.find(p => p.id === id);
+    }
+
+    if (petConfig) {
+      const newPet = new ActivePet(petConfig, id);
+      activePets.push(newPet);
+      
+      // Initial greeting for each pet
+      setTimeout(() => {
+        const timeGreetings = newPet.getTimeBasedGreeting();
+        newPet.say(timeGreetings[Math.floor(Math.random() * timeGreetings.length)]);
+      }, 1000 + Math.random() * 1000);
+    }
+  });
+}
+
+let isDraggingPet = false;
+let petDragOffsetX = 0;
+let petDragOffsetY = 0;
+
+
+let petJumpY = 0;
+let petIsJumping = false;
+let petJumpStartTime = 0;
+let petBubbleHideTimer = null;
+
+
+
+
+let isFirstReminder = true;
+function scheduleRestReminder() {
+  const minTime = 15 * 60 * 1000;
+  const maxTime = 30 * 60 * 1000;
+  let nextReminder = minTime + Math.random() * (maxTime - minTime);
+  
+  if (isFirstReminder) {
+    nextReminder = 5 * 60000; // 5 mins for first one
+    isFirstReminder = false;
+  }
+  
+  setTimeout(() => {
+    const isTurnedOff = getCleanLocalStorage("pet_turned_off") === "true";
+    if (!isTurnedOff && activePets.length > 0) {
+      // Frequency check
+      const freq = getCleanLocalStorage("pet_chatter_freq") || "1";
+      let chance = 0.3; // Default
+      if (freq === "0") chance = 0.05;
+      if (freq === "2") chance = 0.6;
+
+      if (Math.random() < chance) {
+        const randomPet = activePets[Math.floor(Math.random() * activePets.length)];
+        const suggestGame = getCleanLocalStorage("pet_auto_game_suggest") === "true";
+        if (suggestGame) {
+          randomPet.say("Chủ nhân mỏi mắt chưa? Chơi game 1 lát hông? (Bấm vào tôi để chơi!) ❤️", 15000);
+          randomPet.isAwaitingGameTrigger = true;
+          setTimeout(() => { randomPet.isAwaitingGameTrigger = false; }, 30000);
+        } else {
+          const normalSayings = [
+            "Chủ nhân ơi, mình nhắm mắt nghỉ ngơi 30 giây nha! 👀",
+            "Uống tý nước đi chủ nhân yêu dấu! 💧",
+            "Vươn vai chút xíu nhé, bồ ngồi lâu lắm rồi á! 🤸",
+            "Học chăm quá, tớ rất tự hào về bồ! 🥰"
+          ];
+          randomPet.say(normalSayings[Math.floor(Math.random() * normalSayings.length)], 12000);
+        }
+      }
+    }
+    scheduleRestReminder();
+  }, nextReminder);
+}
+
+// Start pet system
+document.addEventListener("DOMContentLoaded", () => {
+  initPet();
+  // Animation loop already started at definition or we start it here
+  requestAnimationFrame(animatePet);
+  
+  scheduleRestReminder();
+  
+  // Random chatter
+  setInterval(() => {
+    const isTurnedOff = getCleanLocalStorage("pet_turned_off") === "true";
+    if (!isTurnedOff && activePets.length > 0 && Math.random() < 0.3) {
+      const randomPet = activePets[Math.floor(Math.random() * activePets.length)];
+      if (randomPet.walking) {
+        randomPet.interact(false);
+      }
+    }
+  }, 40000);
+});
+
+function toggleBackgroundPopup() {
+  const popup = document.getElementById("bgPopup");
+  if (popup.style.display === "none" || popup.style.display === "") {
+    popup.style.display = "flex";
+    setTimeout(() => {
+      popup.style.opacity = "1";
+      const contentBox = popup.children[0];
+      if(contentBox) contentBox.style.transform = "scale(1) translateY(0)";
+    }, 10);
+  } else {
+    popup.style.opacity = "0";
+    const contentBox = popup.children[0];
+    if(contentBox) contentBox.style.transform = "scale(0.95) translateY(10px)";
+    setTimeout(() => {
+      popup.style.display = "none";
+    }, 300);
+  }
+}
+
+/* =======================================================================
+   KHO GIAO DIỆN & HÌNH NỀN CHỦ ĐỀ (THEME & WALLPAPER STUDIO ENGINE)
+======================================================================= */
+const BACKGROUND_THEMES = [
+  // 🌸 4 Mùa Phong Cách Nhật Bản
+  {
+    id: "japan_sakura",
+    category: "japan",
+    name: "Mùa Xuân Sakura Núi Phú Sĩ",
+    icon: "🌸",
+    desc: "Hoa anh đào nở rộ bên hồ nước dưới chân núi Phú Sĩ thơ mộng",
+    url: "https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=1920&q=80",
+    fx: "sakura",
+    fxName: "🌸 Cánh hoa anh đào",
+    dim: 25,
+    blur: 0
+  },
+  {
+    id: "japan_bamboo",
+    category: "japan",
+    name: "Mùa Hạ Rừng Trúc Arashiyama",
+    icon: "🌿",
+    desc: "Rừng trúc Kyoto ngát xanh, tiếng gió thanh tịnh và đom đóm lấp lánh",
+    url: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1920&q=80",
+    fx: "fireflies",
+    fxName: "✨ Đom đóm mùa hạ",
+    dim: 25,
+    blur: 0
+  },
+  {
+    id: "japan_momiji",
+    category: "japan",
+    name: "Mùa Thu Cố Đô Kyoto",
+    icon: "🍁",
+    desc: "Chùa cổ Nhật Bản ngập tràn sắc đỏ cam lá phong rực rỡ và lãng mạn",
+    url: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1920&q=80",
+    fx: "leaves",
+    fxName: "🍁 Lá phong mùa thu",
+    dim: 25,
+    blur: 0
+  },
+  {
+    id: "japan_snow",
+    category: "japan",
+    name: "Mùa Đông Tuyết Shirakawago",
+    icon: "❄️",
+    desc: "Làng cổ tích Shirakawa-go phủ tuyết trắng tinh khôi và ánh đèn ấm áp",
+    url: "https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?auto=format&fit=crop&w=1920&q=80",
+    fx: "snow",
+    fxName: "❄️ Bông tuyết mùa đông",
+    dim: 25,
+    blur: 0
+  },
+
+  // 🇻🇳 Lễ Hội & Sự Kiện Trọng Đại
+  {
+    id: "fest_vietnam",
+    category: "festival",
+    name: "Tự Hào Việt Nam (2/9 & 30/4)",
+    icon: "🇻🇳",
+    desc: "Cờ đỏ sao vàng tung bay kiêu hãnh, non sông thống nhất rực sáng pháo hoa",
+    url: "https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?auto=format&fit=crop&w=1920&q=80",
+    fx: "vietnam_sparks",
+    fxName: "🇻🇳 Sao vàng & Pháo hoa",
+    dim: 30,
+    blur: 0
+  },
+  {
+    id: "fest_tet",
+    category: "festival",
+    name: "Tết Nguyên Đán Cổ Truyền",
+    icon: "🧧",
+    desc: "Xuân sum vầy với đèn lồng đỏ, câu đối may mắn, cành đào rộn ràng",
+    url: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=1920&q=80",
+    fx: "lanterns",
+    fxName: "🏮 Đèn lồng & Pháo hoa Tết",
+    dim: 28,
+    blur: 0
+  },
+  {
+    id: "fest_noel",
+    category: "festival",
+    name: "Giáng Sinh Diệu Kỳ (Noel)",
+    icon: "🎄",
+    desc: "Đêm Noel lung linh huyền ảo với cây thông, quà tặng và ánh đèn ấm áp",
+    url: "https://images.unsplash.com/photo-1543589077-47d81606c1bf?auto=format&fit=crop&w=1920&q=80",
+    fx: "snow",
+    fxName: "❄️ Tuyết Giáng Sinh",
+    dim: 28,
+    blur: 0
+  },
+  {
+    id: "fest_mid_autumn",
+    category: "festival",
+    name: "Đêm Hội Trăng Rằm Trung Thu",
+    icon: "🏮",
+    desc: "Ánh trăng rằm sáng trong, lồng đèn lung linh và bầu trời đêm an yên",
+    url: "https://images.unsplash.com/photo-1532767153582-b1a0e5145009?auto=format&fit=crop&w=1920&q=80",
+    fx: "lanterns",
+    fxName: "🏮 Lồng đèn & Ánh sao",
+    dim: 30,
+    blur: 0
+  },
+
+  // ☕ Không Gian Chill & Học Tập
+  {
+    id: "vibes_cafe",
+    category: "study",
+    name: "Quán Cà Phê Học Bài (Lo-Fi)",
+    icon: "☕",
+    desc: "Góc bàn học ấm cúng bên tách cà phê thơm, tiếng mưa êm đềm bên cửa sổ",
+    url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1920&q=80",
+    fx: "rain",
+    fxName: "🌧️ Mưa rào Lo-Fi",
+    dim: 25,
+    blur: 0
+  },
+  {
+    id: "vibes_library",
+    category: "study",
+    name: "Thư Viện Hoàng Gia Cổ Điển",
+    icon: "📚",
+    desc: "Kho tàng tri thức đồ sộ trang trọng, không gian tĩnh lặng truyền cảm hứng",
+    url: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1920&q=80",
+    fx: "fireflies",
+    fxName: "✨ Bụi sao tri thức",
+    dim: 30,
+    blur: 0
+  },
+  {
+    id: "vibes_galaxy",
+    category: "study",
+    name: "Vũ Trụ & Cực Quang Ngân Hà",
+    icon: "🌌",
+    desc: "Bầu trời sao kỳ vĩ và dải cực quang Aurora huyền ảo thắp sáng màn đêm",
+    url: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80",
+    fx: "stars",
+    fxName: "⭐ Sao băng vũ trụ",
+    dim: 25,
+    blur: 0
+  },
+  {
+    id: "vibes_ocean",
+    category: "study",
+    name: "Biển Hoàng Hôn Bình Yên",
+    icon: "🌊",
+    desc: "Bãi biển ngập tràn sắc hoàng hôn, sóng vỗ êm đềm giải tỏa mọi âu lo",
+    url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80",
+    fx: "bubbles",
+    fxName: "🫧 Bong bóng biển",
+    dim: 20,
+    blur: 0
+  }
+];
+
+let currentThemeState = {
+  themeId: "default",
+  customBgUrl: "",
+  activeFx: "none",
+  particleDensity: 2, // 1: Nhẹ nhàng (50%), 2: Vừa phải (100%), 3: Rực rỡ (180%)
+  dim: 25,
+  blur: 0
+};
+
+let currentCategoryFilter = "all";
+
+// Tên hiển thị các hiệu ứng
+const THEME_FX_LABELS = {
+  "sakura": "🌸 Hoa anh đào",
+  "snow": "❄️ Tuyết mùa đông",
+  "leaves": "🍁 Lá phong thu",
+  "vietnam_sparks": "🇻🇳 Sao vàng & Pháo hoa",
+  "lanterns": "🏮 Đèn lồng Tết & Trăng",
+  "fireflies": "✨ Đom đóm lấp lánh",
+  "stars": "⭐ Sao băng vũ trụ",
+  "rain": "🌧️ Mưa rào Lo-Fi",
+  "bubbles": "🫧 Bong bóng biển",
+  "none": "🚫 Đã tắt hiệu ứng"
+};
+
+const THEME_DENSITY_LABELS = {
+  1: "🌿 Nhẹ nhàng (50%)",
+  2: "✨ Vừa phải (Chuẩn)",
+  3: "🎆 Rực rỡ & Dày đặc (180%)"
+};
+
+// Render danh sách themes theo category
+function renderThemeGallery() {
+  const grid = document.getElementById("themeGalleryGrid");
+  if (!grid) return;
+
+  const filtered = currentCategoryFilter === "all" 
+    ? BACKGROUND_THEMES 
+    : BACKGROUND_THEMES.filter(t => t.category === currentCategoryFilter);
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: #94a3b8;">Không tìm thấy chủ đề phù hợp</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(t => {
+    const isActive = currentThemeState.themeId === t.id;
+    return `
+      <div class="theme-preset-card ${isActive ? 'active-theme' : ''}" id="themeCard_${t.id}" onclick="applyThemeById('${t.id}')">
+        <div class="theme-card-thumb-wrap">
+          <img src="${t.url}" alt="${t.name}" class="theme-card-thumb-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=600&q=80'">
+          ${isActive ? `<div class="theme-card-active-badge">✓ Đang dùng</div>` : ''}
+          <div class="theme-card-fx-badge">${t.fxName}</div>
+        </div>
+        <div class="theme-card-meta">
+          <div class="theme-card-title">${t.icon} ${t.name}</div>
+          <div class="theme-card-desc">${t.desc}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Lọc danh mục Theme
+function filterThemesByCategory(cat) {
+  currentCategoryFilter = cat;
+
+  // Update tabs visual state
+  const tabs = [
+    { id: 'themeTabAll', cat: 'all' },
+    { id: 'themeTabJapan', cat: 'japan' },
+    { id: 'themeTabFestival', cat: 'festival' },
+    { id: 'themeTabStudy', cat: 'study' },
+    { id: 'themeTabCustom', cat: 'custom' }
+  ];
+
+  tabs.forEach(t => {
+    const el = document.getElementById(t.id);
+    if (el) {
+      if (t.cat === cat) el.classList.add('active');
+      else el.classList.remove('active');
+    }
+  });
+
+  const customSection = document.getElementById("themeCustomSection");
+  const galleryGrid = document.getElementById("themeGalleryGrid");
+
+  if (cat === "custom") {
+    if (customSection) customSection.style.display = "block";
+    if (galleryGrid) galleryGrid.style.display = "none";
+  } else {
+    if (customSection) customSection.style.display = "none";
+    if (galleryGrid) {
+      galleryGrid.style.display = "grid";
+      renderThemeGallery();
+    }
+  }
+}
+
+// Áp dụng Theme theo ID
+function applyThemeById(themeId) {
+  const theme = BACKGROUND_THEMES.find(t => t.id === themeId);
+  if (!theme) return;
+
+  currentThemeState.themeId = theme.id;
+  currentThemeState.customBgUrl = theme.url;
+  currentThemeState.activeFx = theme.fx;
+  if (typeof theme.dim === "number") currentThemeState.dim = theme.dim;
+  if (typeof theme.blur === "number") currentThemeState.blur = theme.blur;
+
+  // Áp dụng data-theme lên body và html để kích hoạt toàn bộ hệ thống CSS Theme
+  document.body.setAttribute("data-theme", theme.id);
+  document.documentElement.setAttribute("data-theme", theme.id);
+
+  // Cập nhật background
+  setBackground(theme.url);
+
+  // Cập nhật Dim & Blur
+  updateOverlayDim(currentThemeState.dim);
+  updateOverlayBlur(currentThemeState.blur);
+
+  // Cập nhật Live Particles
+  setLiveEffect(theme.fx, false);
+
+  // Cập nhật UI controls
+  syncThemeUiControls();
+  renderThemeGallery();
+
+  showToast(`Đã áp dụng giao diện: ${theme.name}`, "success");
+}
+
+// Cập nhật Live Particles Engine
+function setLiveEffect(fxType, showNotification = true) {
+  currentThemeState.activeFx = fxType;
+
+  // Cập nhật chip active
+  const chips = document.querySelectorAll("#themeFxSelector .theme-fx-chip");
+  chips.forEach(chip => {
+    if (chip.getAttribute("data-fx") === fxType) {
+      chip.classList.add("active");
+    } else {
+      chip.classList.remove("active");
+    }
+  });
+
+  // Cập nhật badge
+  const badge = document.getElementById("currentFxNameBadge");
+  if (badge) {
+    badge.textContent = THEME_FX_LABELS[fxType] || "Hiệu ứng tùy chỉnh";
+  }
+
+  // Khởi chạy hiệu ứng
+  renderParticleEngine(fxType);
+
+  if (showNotification) {
+    showToast(`Đã áp dụng hiệu ứng: ${THEME_FX_LABELS[fxType] || fxType}`, "info");
+  }
+}
+
+// Cập nhật mật độ hạt & không khí (Particle Density)
+function updateParticleDensity(val) {
+  const num = parseInt(val, 10) || 2;
+  currentThemeState.particleDensity = num;
+
+  const label = document.getElementById("themeDensityLabel");
+  if (label) {
+    label.textContent = THEME_DENSITY_LABELS[num] || "✨ Vừa phải (Chuẩn)";
+  }
+
+  const slider = document.getElementById("themeDensitySlider");
+  if (slider && slider.value != num) {
+    slider.value = num;
+  }
+
+  if (currentThemeState.activeFx && currentThemeState.activeFx !== "none") {
+    renderParticleEngine(currentThemeState.activeFx);
+  }
+}
+
+// Bộ máy tạo hiệu ứng Hạt chuyển động thuần CSS & Vector (Không dùng Emoji icon thô sơ)
+function renderParticleEngine(fxType) {
+  const container = document.getElementById("globalThemeParticleContainer");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!fxType || fxType === "none") return;
+
+  const density = parseInt(currentThemeState.particleDensity, 10) || 2;
+  const densityMultiplier = density === 1 ? 0.5 : (density === 3 ? 1.8 : 1.0);
+
+  switch (fxType) {
+    case "sakura": {
+      const particleCount = Math.max(6, Math.round(24 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-petal";
+        p.appendChild(inner);
+
+        const left = Math.random() * 96 + 2;
+        const delay = Math.random() * 8;
+        const duration = 7 + Math.random() * 5;
+        const size = 13 + Math.random() * 12;
+        const sway = (Math.random() - 0.5) * 180;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size * 1.3}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `sakuraFall3D ${duration}s linear infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "snow": {
+      const particleCount = Math.max(8, Math.round(30 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-snow";
+        p.appendChild(inner);
+
+        const left = Math.random() * 98 + 1;
+        const delay = Math.random() * 7;
+        const duration = 6 + Math.random() * 6;
+        const size = 6 + Math.random() * 10;
+        const sway = (Math.random() - 0.5) * 60;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `snowFallGentle ${duration}s linear infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "leaves": {
+      const particleCount = Math.max(6, Math.round(20 * densityMultiplier));
+      const palettes = [
+        ["#ef4444", "#dc2626", "#991b1b"], // Crimson
+        ["#f97316", "#ea580c", "#c2410c"], // Burnt Amber
+        ["#eab308", "#d97706", "#b45309"], // Golden Ochre
+        ["#fb923c", "#f43f5e", "#be123c"]  // Rose Sunset
+      ];
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const col = palettes[i % palettes.length];
+        const gradId = `momijiGrad_${i}_${Date.now()}`;
+        
+        p.innerHTML = `
+          <svg viewBox="0 0 24 24" class="css-particle-momiji">
+            <defs>
+              <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="${col[0]}"/>
+                <stop offset="60%" stop-color="${col[1]}"/>
+                <stop offset="100%" stop-color="${col[2]}"/>
+              </linearGradient>
+            </defs>
+            <path fill="url(#${gradId})" d="M12 2C12.5 4.5 13.5 6 15 6.5C16.8 5 18.5 4.2 20 4C19.5 6 18.5 7.5 17 8.5C19.5 9 21.5 10 23 11.5C21 12 19 12.2 17 12C18 13.5 19 15.5 19.5 17.5C17.5 17 15.5 15.8 14 14.5C13.5 16.5 13 19 12 21.5C11 19 10.5 16.5 10 14.5C8.5 15.8 6.5 17 4.5 17.5C5 15.5 6 13.5 7 12C5 12.2 3 12 1 11.5C2.5 10 4.5 9 7 8.5C5.5 7.5 4.5 6 4 4C5.5 4.2 7.2 5 9 6.5C10.5 6 11.5 4.5 12 2Z"/>
+            <path d="M12 21.5 C12 23 12 24.5 11.5 26" stroke="${col[2]}" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+          </svg>
+        `;
+
+        const left = Math.random() * 96 + 2;
+        const delay = Math.random() * 9;
+        const duration = 8 + Math.random() * 6;
+        const size = 22 + Math.random() * 16;
+        const sway = (Math.random() - 0.5) * 160;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `momijiFlutter3D ${duration}s linear infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "vietnam_sparks": {
+      const particleCount = Math.max(5, Math.round(18 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        p.innerHTML = `
+          <div class="css-particle-vn-star">
+            <div class="vn-star-halo"></div>
+            <div class="vn-star-shape"></div>
+          </div>
+        `;
+
+        const left = Math.random() * 94 + 3;
+        const delay = Math.random() * 4;
+        const duration = 3.5 + Math.random() * 2.5;
+        const size = 16 + Math.random() * 14;
+        const sway = (Math.random() - 0.5) * 120;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `fireworksSparkRise ${duration}s ease-out infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "lanterns": {
+      const particleCount = Math.max(4, Math.round(14 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const gradId = `lanternGrad_${i}_${Date.now()}`;
+
+        p.innerHTML = `
+          <svg viewBox="0 0 28 38" class="css-particle-lantern">
+            <defs>
+              <radialGradient id="${gradId}" cx="50%" cy="45%" r="50%">
+                <stop offset="0%" stop-color="#fffbeb"/>
+                <stop offset="30%" stop-color="#fef08a"/>
+                <stop offset="70%" stop-color="#f43f5e"/>
+                <stop offset="100%" stop-color="#9f1239"/>
+              </radialGradient>
+            </defs>
+            <rect x="9" y="2" width="10" height="2.5" rx="1" fill="#facc15"/>
+            <ellipse cx="14" cy="18" rx="11" ry="13" fill="url(#${gradId})"/>
+            <path d="M7 18 C7 9 21 9 21 18 C21 27 7 27 7 18" stroke="#fbbf24" stroke-width="0.75" fill="none" opacity="0.65"/>
+            <line x1="14" y1="5" x2="14" y2="31" stroke="#fbbf24" stroke-width="0.75" opacity="0.7"/>
+            <rect x="10" y="30" width="8" height="2" rx="0.8" fill="#facc15"/>
+            <path d="M14 32 L14 38 M12 33 L11 37 M16 33 L17 37" stroke="#e11d48" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        `;
+
+        const left = Math.random() * 94 + 3;
+        const delay = Math.random() * 10;
+        const duration = 10 + Math.random() * 6;
+        const size = 26 + Math.random() * 14;
+        const sway = (Math.random() - 0.5) * 80;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size * 1.35}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `lanternDriftUp ${duration}s ease-in-out infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "fireflies": {
+      const particleCount = Math.max(6, Math.round(24 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-firefly";
+        p.appendChild(inner);
+
+        const left = Math.random() * 94 + 3;
+        const top = Math.random() * 90 + 5;
+        const delay = Math.random() * 6;
+        const duration = 5 + Math.random() * 4;
+        const size = 7 + Math.random() * 7;
+        const sway = (Math.random() - 0.5) * 90;
+        const rise = (Math.random() - 0.5) * 90;
+
+        p.style.left = `${left}%`;
+        p.style.top = `${top}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.setProperty("--particle-rise", `${rise}px`);
+        p.style.animation = `fireflyOrganicDrift ${duration}s ease-in-out infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "stars": {
+      const particleCount = Math.max(5, Math.round(20 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-star";
+        p.appendChild(inner);
+
+        const left = Math.random() * 94 + 3;
+        const top = Math.random() * 90 + 5;
+        const delay = Math.random() * 5;
+        const duration = 4 + Math.random() * 3.5;
+        const size = 12 + Math.random() * 12;
+        const sway = (Math.random() - 0.5) * 40;
+        const rise = (Math.random() - 0.5) * 40;
+
+        p.style.left = `${left}%`;
+        p.style.top = `${top}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.setProperty("--particle-rise", `${rise}px`);
+        p.style.animation = `starCrossSparkle ${duration}s ease-in-out infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "rain": {
+      const particleCount = Math.max(10, Math.round(34 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-rain";
+        p.appendChild(inner);
+
+        const left = Math.random() * 98 + 1;
+        const delay = Math.random() * 2;
+        const duration = 1.2 + Math.random() * 0.8;
+        const height = 24 + Math.random() * 22;
+
+        p.style.left = `${left}%`;
+        p.style.width = "2px";
+        p.style.height = `${height}px`;
+        p.style.animation = `rainFallRealistic ${duration}s linear infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    case "bubbles": {
+      const particleCount = Math.max(5, Math.round(18 * densityMultiplier));
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement("div");
+        p.className = "theme-particle-item";
+        const inner = document.createElement("div");
+        inner.className = "css-particle-bubble";
+        p.appendChild(inner);
+
+        const left = Math.random() * 94 + 3;
+        const delay = Math.random() * 8;
+        const duration = 7 + Math.random() * 5;
+        const size = 16 + Math.random() * 22;
+        const sway = (Math.random() - 0.5) * 90;
+
+        p.style.left = `${left}%`;
+        p.style.width = `${size}px`;
+        p.style.height = `${size}px`;
+        p.style.setProperty("--particle-sway", `${sway}px`);
+        p.style.animation = `bubbleRiseFloat ${duration}s ease-in-out infinite ${delay}s`;
+
+        container.appendChild(p);
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+// Cập nhật độ tối của lớp phủ (Dim Overlay)
+function updateOverlayDim(val) {
+  const num = parseInt(val, 10) || 0;
+  currentThemeState.dim = num;
+
+  const overlay = document.getElementById("globalThemeBackdropOverlay");
+  if (overlay) {
+    overlay.style.setProperty("--theme-dim", (num / 100).toFixed(2));
+  }
+
+  const label = document.getElementById("themeDimLabel");
+  if (label) label.textContent = `${num}%`;
+
+  const slider = document.getElementById("themeDimSlider");
+  if (slider && slider.value != num) slider.value = num;
+}
+
+// Cập nhật độ mờ của lớp phủ (Backdrop Blur)
+function updateOverlayBlur(val) {
+  const num = parseInt(val, 10) || 0;
+  currentThemeState.blur = num;
+
+  const overlay = document.getElementById("globalThemeBackdropOverlay");
+  if (overlay) {
+    overlay.style.setProperty("--theme-blur", `${num}px`);
+  }
+
+  const label = document.getElementById("themeBlurLabel");
+  if (label) label.textContent = `${num}px`;
+
+  const slider = document.getElementById("themeBlurSlider");
+  if (slider && slider.value != num) slider.value = num;
+}
+
+// Đồng bộ các controls UI theo currentThemeState
+function syncThemeUiControls() {
+  updateOverlayDim(currentThemeState.dim);
+  updateOverlayBlur(currentThemeState.blur);
+
+  // Sync Density
+  const density = parseInt(currentThemeState.particleDensity, 10) || 2;
+  const densityLabel = document.getElementById("themeDensityLabel");
+  if (densityLabel) {
+    densityLabel.textContent = THEME_DENSITY_LABELS[density] || "✨ Vừa phải (Chuẩn)";
+  }
+  const densitySlider = document.getElementById("themeDensitySlider");
+  if (densitySlider && densitySlider.value != density) {
+    densitySlider.value = density;
+  }
+
+  // Sync FX Chips
+  const chips = document.querySelectorAll("#themeFxSelector .theme-fx-chip");
+  chips.forEach(chip => {
+    if (chip.getAttribute("data-fx") === currentThemeState.activeFx) {
+      chip.classList.add("active");
+    } else {
+      chip.classList.remove("active");
+    }
+  });
+
+  const badge = document.getElementById("currentFxNameBadge");
+  if (badge) {
+    badge.textContent = THEME_FX_LABELS[currentThemeState.activeFx] || "Tự chọn";
+  }
+}
+
+// Tải ảnh tùy chỉnh từ máy tính
+function handleCustomBgFileUpload(input) {
+  if (!input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  const span = document.getElementById("bgSelectedFileName");
+  if (span) span.textContent = file.name;
+
+  showGlobalSpinner("Đang tối ưu hóa hình nền...");
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+      const max_dim = 1920;
+
+      if (width > height) {
+        if (width > max_dim) {
+          height *= max_dim / width;
+          width = max_dim;
+        }
+      } else {
+        if (height > max_dim) {
+          width *= max_dim / height;
+          height = max_dim;
+        }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      hideGlobalSpinner();
+
+      currentThemeState.themeId = "custom";
+      currentThemeState.customBgUrl = dataUrl;
+      setBackground(dataUrl);
+      renderThemeGallery();
+      showToast("Đã tải ảnh lên thành công!", "success");
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Áp dụng ảnh từ đường link URL
+function applyBgFromUrl() {
+  const urlInput = document.getElementById("bgUrlInput");
+  if (!urlInput || !urlInput.value.trim()) {
+    showToast("Vui lòng nhập đường link ảnh hợp lệ.", "warning");
+    return;
+  }
+
+  const url = urlInput.value.trim();
+  currentThemeState.themeId = "custom";
+  currentThemeState.customBgUrl = url;
+  setBackground(url);
+  renderThemeGallery();
+  showToast("Đã áp dụng ảnh từ link!", "success");
+}
+
+// Lưu và đóng Studio
+function saveAndCloseThemeStudio() {
+  try {
+    localStorage.setItem("tds_theme_config", JSON.stringify(currentThemeState));
+    if (currentThemeState.customBgUrl) {
+      localStorage.setItem("custom_bg", currentThemeState.customBgUrl);
+    } else {
+      localStorage.removeItem("custom_bg");
+    }
+    showToast("Đã lưu cài đặt giao diện không gian học tập!", "success");
+  } catch (err) {
+    console.error("Save theme error:", err);
+  }
+  toggleBackgroundPopup();
+}
+
+// Khôi phục mặc định
+function clearBackground() {
+  currentThemeState = {
+    themeId: "default",
+    customBgUrl: "",
+    activeFx: "none",
+    particleDensity: 2,
+    dim: 0,
+    blur: 0
+  };
+
+  localStorage.removeItem("custom_bg");
+  localStorage.removeItem("tds_theme_config");
+
+  document.body.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-theme");
+  document.body.style.backgroundImage = "";
+  updateOverlayDim(0);
+  updateOverlayBlur(0);
+  updateParticleDensity(2);
+  renderParticleEngine("none");
+  syncThemeUiControls();
+  renderThemeGallery();
+
+  showToast("Đã khôi phục không gian nền mặc định.", "success");
+  toggleBackgroundPopup();
+}
+
+// Đặt background CSS
+function setBackground(url) {
+  if (!url) {
+    document.body.style.backgroundImage = "";
+    return;
+  }
+  document.body.style.backgroundImage = `url('${url}')`;
+  document.body.style.backgroundSize = "cover";
+  document.body.style.backgroundPosition = "center";
+  document.body.style.backgroundRepeat = "no-repeat";
+  document.body.style.backgroundAttachment = "fixed";
+}
+
+// Khởi tạo Theme khi tải trang
+(function initThemeStudio() {
+  try {
+    const savedConfig = getCleanLocalStorage("tds_theme_config");
+    if (savedConfig) {
+      const parsed = JSON.parse(savedConfig);
+      currentThemeState = Object.assign(currentThemeState, parsed);
+    } else {
+      const legacyBg = getCleanLocalStorage("custom_bg");
+      if (legacyBg) {
+        currentThemeState.themeId = "custom";
+        currentThemeState.customBgUrl = legacyBg;
+      }
+    }
+
+    if (currentThemeState.themeId && currentThemeState.themeId !== "default" && currentThemeState.themeId !== "custom") {
+      document.body.setAttribute("data-theme", currentThemeState.themeId);
+      document.documentElement.setAttribute("data-theme", currentThemeState.themeId);
+    }
+
+    if (currentThemeState.customBgUrl) {
+      setBackground(currentThemeState.customBgUrl);
+    }
+
+    updateOverlayDim(currentThemeState.dim || 0);
+    updateOverlayBlur(currentThemeState.blur || 0);
+
+    if (currentThemeState.activeFx && currentThemeState.activeFx !== "none") {
+      renderParticleEngine(currentThemeState.activeFx);
+    }
+  } catch (e) {
+    console.error("Init theme failed:", e);
+  }
+})();
+
+// Expose theme utilities to window
+window.updateParticleDensity = updateParticleDensity;
+window.applyThemeById = applyThemeById;
+window.filterThemesByCategory = filterThemesByCategory;
+window.setLiveEffect = setLiveEffect;
+window.updateOverlayDim = updateOverlayDim;
+window.updateOverlayBlur = updateOverlayBlur;
+window.saveAndCloseThemeStudio = saveAndCloseThemeStudio;
+window.clearBackground = clearBackground;
+window.handleCustomBgFileUpload = handleCustomBgFileUpload;
+window.applyBgFromUrl = applyBgFromUrl;
+
+// Khởi chạy modal và render khi mở
+const originalToggleBgPopup = toggleBackgroundPopup;
+window.toggleBackgroundPopup = function() {
+  originalToggleBgPopup();
+  const popup = document.getElementById("bgPopup");
+  if (popup && popup.style.display !== "none") {
+    renderThemeGallery();
+    syncThemeUiControls();
+  }
+};
+
+function toggleMusicPopup() {
+  const popup = document.getElementById("musicPopup");
+  popup.style.display = (popup.style.display === "none" || popup.style.display === "") ? "block" : "none";
+}
+
+function updateMode() {
+  const mode = document.getElementById("modeSelect").value;
+  document.getElementById("artistDiv").style.display = (mode === 'artist') ? 'block' : 'none';
+  document.getElementById("songDiv").style.display = (mode === 'song') ? 'block' : 'none';
+}
+
+const artistSongs = {
+  "minh-dang": [
+    "https://soundcloud.com/minh-dang-130391450/ga-san-ca-remix-houselak-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/tamka-tren-samba-remix-qnt-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/dem-trang-tinh-yeu-remix-houselak-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/chiec-khan-gio-am-drill-mix-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/nang-chen-tieu-sau-houselak-tran-manh-cuong-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/anh-dau-tu-luc-em-di-houselak-tran-manh-cuong-m1nimal-mix",
+    "https://soundcloud.com/minh-dang-130391450/tran-bo-nho-m1nimal-remix-hot-tiktok-remix",
+    "https://soundcloud.com/minh-dang-130391450/tinh-yeu-ngu-quen-hoang-ton-house-remix-m1nimal",
+    "https://soundcloud.com/minh-dang-130391450/da-xa-4pnutz",
+    "https://soundcloud.com/minh-dang-130391450/anh-la-ngoai-le-cua-em-phuong-ly-m1nimal-remix"
+  ],
+
+  "lofi-girl": [
+    "https://soundcloud.com/lofi_girl/sova",
+    "https://soundcloud.com/lofi_girl/the-avenue",
+    "https://soundcloud.com/lofi_girl/vast-forests",
+    "https://soundcloud.com/lofi_girl/lmagic-of-the-mountain",
+    "https://soundcloud.com/lofi_girl/goyo-jazzyhan",
+    "https://soundcloud.com/lofi_girl/sleepermane-forevergreen",
+    "https://soundcloud.com/lofi_girl/knights-of-revelry",
+    "https://soundcloud.com/lofi_girl/as-they-left-together-exploring-forever",
+    "https://soundcloud.com/lofi_girl/summer-in-rio",
+    "https://soundcloud.com/lofi_girl/beach-cat",
+    "https://soundcloud.com/lofi_girl/phlocalyst-new-scenes",
+    "https://soundcloud.com/lofi_girl/a-new-chapter",
+    "https://soundcloud.com/lofi_girl/ballads-of-the-forgotten-throne",
+    "https://soundcloud.com/lofi_girl/beyond-signals",
+    "https://soundcloud.com/lofi_girl/une-nuit-a-montmartre",
+    "https://soundcloud.com/lofi_girl/wanderers-tale-ii"
+  ],
+
+  "son-tung": [
+    "https://soundcloud.com/yuu1210/chung-ta-cua-tuong-lai",
+    "https://soundcloud.com/vpoppamtio/noi-nay-co-anh",
+    "https://soundcloud.com/quarter-studio/khong-phai-dang-vua-dau-son-tung-mtp-beat-chuan",
+    "https://soundcloud.com/beo-boi/ch-y-ngay-i-onionn-x-s-n-t-ng",
+    "https://soundcloud.com/tripled-duongdaiduong/son-tung-mtp-lac-troi-triple-d-remix",
+    "https://soundcloud.com/user-657066387/making-my-way-s-n-t-ng-m-tp-1",
+    "https://soundcloud.com/hieuz-music/am-tham-ben-em-lofi-ver-son-tung-m-tp-x-besu",
+    "https://soundcloud.com/chu-quoc-viet/chac-ai-do-se-ve-ost-chang-trai-nam-ay-son-tung-m-tp",
+    "https://soundcloud.com/tinhiumauhong/ch-ng-ta-c-a-t-ng-lai-remix",
+    "https://soundcloud.com/ng-thi-n-277171536/ng-l-m-tr-i-tim-anh-au-thazh",
+    "https://soundcloud.com/yuu1210/chung-ta-cua-tuong-lai",
+    "https://soundcloud.com/user-nghiadz/chung-ta-khong-thuoc-ve-nhau-x-lan-cuoi-x-safari-huy-pt-remix-nguyen-trong-nghia"
+  ],
+
+  "den-vau": [
+    "https://soundcloud.com/den1305/den-luon-yeu-doi-ft-cheng",
+    "https://soundcloud.com/den1305/den-dien-vien-toi-ft-thanh-bui-cadillac",
+    "https://soundcloud.com/den1305/den-ai-muon-nghe-khong",
+    "https://soundcloud.com/den1305/dtmh",
+    "https://soundcloud.com/den1305/den-mang-tien-ve-cho-me-ft-nguyen-thao",
+    "https://soundcloud.com/den1305/den-cam-on-live-at-show-cua-den-prod-by-novmber",
+    "https://soundcloud.com/den1305/den-ta-cu-di-cung-nhau-ft-linh-cao-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-dua-nhau-di-tron-ft-linh-cao-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-hai-trieu-nam-ft-bien-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-di-theo-bong-mat-troi-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-x-kimmese-loving-you-sunny-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-anh-dech-can-gi-nhieu-ngoai-em-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-x-ngot-cho-toi-lang-thang-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-do-em-biet-anh-dang-nghi-gi-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-muoi-nam-ft-ngoc-linh-live-at-show-cua-den",
+    "https://soundcloud.com/den1305/den-tron-tim-ft-mtv-band",
+    "https://soundcloud.com/den1305/den-x-justatee-di-ve-nha",
+    "https://soundcloud.com/den1305/den-mot-trieu-like-remake-ft-thanh-dong",
+    "https://soundcloud.com/den1305/bai-nay-chill-phet",
+    "https://soundcloud.com/den1305/loi-nho",
+    "https://soundcloud.com/lan-ng-c-977453503/den-lang-dang-playlist-rap-moi-nhat",
+    "https://soundcloud.com/nike-adidas-819864301/en-tri-u-i-u-nh-x-u-xi-u-l-ng",
+    "https://soundcloud.com/h-ng-ph-ng-duy-546609611/9582b794-ad70-42b3-b90e",
+    "https://soundcloud.com/m-h-6591988/vi-nha-den",
+    "https://soundcloud.com/den1305/den-mo-live-at-show-cua-den"
+  ]
+};
+
+function playMusic() {
+  const url = document.getElementById("musicSelect").value;
+  setPlayer(url, true);
+}
+
+function playRandomFromSource() {
+  const artistKey = document.getElementById("artistSelect").value;
+  if (artistSongs[artistKey]) {
+    const songs = artistSongs[artistKey];
+    const randomIndex = Math.floor(Math.random() * songs.length);
+    setPlayer(songs[randomIndex], true);
+  } else {
+    showToast("Chưa có danh sách bài hát cho nghệ sĩ này!", "warning");
+  }
+}
+
+function stopMusic() {
+  const player = document.getElementById("scPlayer");
+  // Chỉ tạm dừng bằng cách reload với auto_play=false
+  if (player.src.includes("auto_play=true")) {
+    player.src = player.src.replace("auto_play=true", "auto_play=false");
+  }
+}
+
+function setPlayer(url, autoplay=false) {
+  const player = document.getElementById("scPlayer");
+  const wrapper = document.getElementById("scPlayerWrapper");
+  wrapper.style.display = "block";
+
+  // Luôn load ở trạng thái mute trước
+  player.src = "https://w.soundcloud.com/player/?url=" 
+                + encodeURIComponent(url) 
+                + "&auto_play=false";
+
+  // Nếu cần autoplay (sau khi user click) → đổi sang true
+  if (autoplay) {
+    setTimeout(() => {
+      player.src = "https://w.soundcloud.com/player/?url=" 
+                    + encodeURIComponent(url) 
+                    + "&auto_play=true";
+    }, 300);
+  }
+}
+// Nghe nhạc
+
+
+
+
+// Bật tắt QR
+function tdsOpenPopup() {
+  document.getElementById("tdsPopup").style.display = "flex";
+}
+function tdsClosePopup() {
+  document.getElementById("tdsPopup").style.display = "none";
+}
+// Bật tắt QR
+
+
+// Ghép đôi
+let currentUserId = null; // ID user hiện tại
+let cachedUserInfo = null;
+let cachedAvailableUsers = null;
+let cachedIncomingRequests = null;
+let cachedMatchedPartner = null;
+let isPreloadingPairData = false;
+
+function preloadPairingData() {
+  const userEmail = getUserEmail();
+  if (!userEmail || currentUserId || isPreloadingPairData) return;
+  
+  isPreloadingPairData = true;
+  google.script.run.withSuccessHandler(id => {
+    currentUserId = id;
+    if (id) {
+      google.script.run.withSuccessHandler(user => {
+        cachedUserInfo = user;
+        silentFetchPairingLists();
+      }).getUserInfo(id);
+    } else {
+      isPreloadingPairData = false;
+    }
+  }).getUserIdByEmail(userEmail);
+}
+
+function silentFetchPairingLists() {
+  if (!currentUserId) return;
+  
+  let fetchCount = 0;
+  const checkDone = () => {
+    fetchCount++;
+    if(fetchCount >= 3) {
+      isPreloadingPairData = false;
+    }
+  };
+
+  google.script.run.withSuccessHandler(users => {
+    cachedAvailableUsers = users;
+    checkDone();
+    if (document.getElementById('pairingModal').style.display !== 'none') renderAvailableUsers();
+  }).getAvailableUsers(currentUserId);
+  
+  google.script.run.withSuccessHandler(requests => {
+    cachedIncomingRequests = requests;
+    checkDone();
+    if (document.getElementById('pairingModal').style.display !== 'none') renderIncomingRequests();
+  }).getIncomingRequests(currentUserId);
+  
+  google.script.run.withSuccessHandler(partner => {
+    cachedMatchedPartner = partner;
+    checkDone();
+    if (document.getElementById('pairingModal').style.display !== 'none') renderMatchedPartner();
+  }).getMatchedInfo(currentUserId);
+}
+
+function showNotification(message, showSpinner = false, allowClose = false) {
+  const overlay = document.getElementById('notificationOverlay');
+  const popup = document.getElementById('notificationPopup');
+  const msg = document.getElementById('notificationMessage');
+  const spinner = document.getElementById('spinner');
+  const closeBtn = document.getElementById('closeNotification');
+  const okBtn = document.getElementById('okNotificationBtn');
+  
+  if(overlay) {
+    overlay.style.display = 'flex';
+  } else if (popup) {
+    popup.style.display = 'block';
+  }
+
+  if (msg) msg.textContent = message;
+  if (spinner) spinner.style.display = showSpinner ? 'block' : 'none';
+  if (closeBtn) closeBtn.style.display = allowClose ? 'flex' : 'none';
+  if (okBtn) okBtn.style.display = allowClose ? 'block' : 'none';
+}
+
+function hideNotification() {
+  const overlay = document.getElementById('notificationOverlay');
+  const popup = document.getElementById('notificationPopup');
+  
+  if (overlay) {
+    overlay.style.display = 'none';
+  } else if (popup) {
+    popup.style.display = 'none';
+  }
+}
+
+function getUserEmail() {
+  return getCleanSessionStorage("userEmail") || document.body.getAttribute("data-user-email") || "";
+}
+
+function togglePairingPopup() {
+  const modal = document.getElementById('pairingModal');
+  const userEmail = getUserEmail();
+
+  if (!userEmail) {
+    showNotification("Không tìm thấy email người dùng. Vui lòng tải lại trang.", false, true);
+    return;
+  }
+
+  if (modal.style.display === 'block' || modal.style.display === 'flex') {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  } else {
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    if (!currentUserId) {
+      showNotification('Đang tải thông tin...', true, false);
+      google.script.run.withSuccessHandler(id => {
+        currentUserId = id;
+        hideNotification();
+        checkUserInfoOrShowForm();
+      }).getUserIdByEmail(userEmail);
+    } else {
+      checkUserInfoOrShowForm();
+    }
+  }
+}
+
+function checkUserInfoOrShowForm() {
+  if (!currentUserId) {
+    document.getElementById('pairForm').style.display = 'block';
+    document.getElementById('pairMainButtons').style.display = 'none';
+    return;
+  }
+
+  // 🔥 Nếu đã có cache → không gọi server nữa
+  if (cachedUserInfo) {
+    applyUserInfoToUI(cachedUserInfo);
+    return;
+  }
+
+  showNotification('Đang tải thông tin người dùng...', true, false);
+  google.script.run.withSuccessHandler(user => {
+    hideNotification();
+    cachedUserInfo = user;   // ⭐ lưu cache
+    applyUserInfoToUI(user);
+  }).getUserInfo(currentUserId);
+}
+
+function applyUserInfoToUI(user) {
+  const form = document.getElementById('pairForm');
+  // ❗ Xóa mainBtns vì UI mới không dùng mainBtns mà dùng Tabs
+  const profileTab = document.getElementById('profileTabBtn');
+
+  if (!user || !user.name || !user.school || !user.grade || !user.time || !user.goal) {
+    form.style.display = 'block';
+    form.classList.add('active');
+    // Ẩn các section khác
+    document.querySelectorAll('#pairingModal .section').forEach(s => {
+      s.style.display = 'none';
+      s.classList.remove('active');
+    });
+    // Active Profile Tab
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    if (profileTab) profileTab.classList.add('active');
+  } else {
+    // Nếu đã hoàn thiện profile -> Mặc định vào tab Available Users
+    form.style.display = 'none';
+    toggleSection('availableUsers');
+
+    document.getElementById('pairName').value = user.name || '';
+    document.getElementById('pairSchool').value = user.school || '';
+    document.getElementById('pairGrade').value = user.grade || '';
+    document.getElementById('pairPhone').value = user.phone || '';
+    document.getElementById('pairFacebook').value = user.facebook || '';
+    document.getElementById('pairGoal').value = user.goal || '';
+
+    // 🔥 set lại checkbox thời gian
+    setCheckedTimes(user.time);
+  }
+
+  loadAvailableUsers();
+  loadIncomingRequests(user.pairStatus === 'matched');
+  loadMatchedPartner();
+
+  if (user.pairStatus === 'matched') {
+    toggleSection('matchedPartner');
+  }
+}
+
+function setCheckedTimes(timeString) {
+  const times = (timeString || '').split(',').map(t => t.trim());
+  document.querySelectorAll('#pairTime input').forEach(cb => {
+    cb.checked = times.includes(cb.value);
+  });
+}
+
+function getSelectedTimes() {
+  const checked = document.querySelectorAll('#pairTime input:checked');
+  return Array.from(checked).map(cb => cb.value).join(', ');
+}
+
+function submitPairForm() {
+  const userEmail = getUserEmail();
+
+  if (!userEmail) {
+    showNotification('Không tìm thấy email người dùng.', false, true);
+    return;
+  }
+
+  const name = document.getElementById('pairName').value.trim();
+  const school = document.getElementById('pairSchool').value.trim();
+  const grade = document.getElementById('pairGrade').value.trim();
+  const phone = document.getElementById('pairPhone').value.trim();
+  const facebook = document.getElementById('pairFacebook').value.trim();
+  const time = getSelectedTimes();
+  const goal = document.getElementById('pairGoal').value.trim();
+
+if (!name || !school || !grade || time.length === 0 || !goal) {
+    showNotification('Vui lòng điền đầy đủ các thông tin bắt buộc.', false, true);
+    return;
+  }
+
+  const formData = { name, school, grade, phone, facebook, time, goal, email: userEmail };
+  showNotification('Đang lưu thông tin...', true, false);
+
+  google.script.run.withSuccessHandler(id => {
+    hideNotification();
+    currentUserId = id;
+    cachedUserInfo = formData;
+    
+    // UI Cập nhật: vào tab Tìm Đối Tác sau khi lưu thành công
+    document.getElementById('pairForm').style.display = 'none';
+    document.getElementById('pairForm').classList.remove('active');
+    toggleSection('availableUsers');
+    
+    const infoMsg = document.getElementById('infoMessage');
+    if (infoMsg) infoMsg.textContent = 'Thông tin cá nhân đã cập nhật.';
+    
+    checkUserInfoOrShowForm();
+  }).addOrUpdatePairUser(formData);
+}
+
+function getGradientForName(name) {
+  const gradients = [
+    ['#ec4899', '#f43f5e'],
+    ['#8b5cf6', '#d946ef'],
+    ['#3b82f6', '#60a5fa'],
+    ['#10b981', '#34d399'],
+    ['#f59e0b', '#fbbf24'],
+    ['#06b6d4', '#2dd4bf']
+  ];
+  let h = 0;
+  for(let i=0; i<(name||'').length; i++) h += name.charCodeAt(i);
+  const colors = gradients[h % gradients.length];
+  return `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`;
+}
+
+function closePairDetailsOverlay() {
+  const overlay = document.getElementById('pairDetailsOverlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+}
+
+function showPairDetailsOverlay(user, type, isMatchedGlobal = false) {
+  let overlay = document.getElementById('pairDetailsOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'pairDetailsOverlay';
+    overlay.style.display = 'none';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '100002';
+    overlay.style.background = 'rgba(15, 23, 42, 0.7)';
+    overlay.style.backdropFilter = 'blur(16px)';
+    overlay.style.webkitBackdropFilter = 'blur(16px)';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.onclick = (e) => {
+      if(e.target === overlay) closePairDetailsOverlay();
+    };
+    document.body.appendChild(overlay);
+  }
+
+  const initials = (user.name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const gradient = getGradientForName(user.name);
+
+  let statusHtml = '';
+  let actionsHtml = '';
+
+  if (type === 'available') {
+    statusHtml = `<p>📍 ${user.school}</p>`;
+    actionsHtml = `
+      <button class="tinder-btn dismiss" onclick="closePairDetailsOverlay()">✕</button>
+      <button class="tinder-btn like" onclick="closePairDetailsOverlay(); requestPair(${user.id})">💖</button>
+    `;
+  } else if (type === 'request') {
+    statusHtml = `<p>📍 ${user.school} &nbsp; • &nbsp; 📬 Đang chờ</p>`;
+    actionsHtml = `
+      <button class="tinder-btn dismiss" onclick="closePairDetailsOverlay(); declinePairRequestUI(${user.id})" ${isMatchedGlobal ? 'disabled' : ''}>✕</button>
+      <button class="tinder-btn accept" onclick="closePairDetailsOverlay(); confirmPairRequest(${user.id})" ${isMatchedGlobal ? 'disabled' : ''}>💘</button>
+    `;
+  } else if (type === 'matched') {
+    statusHtml = `<p>📍 ${user.school} &nbsp; • &nbsp; 💞 Đã ghép đôi</p>`;
+    actionsHtml = `
+      <button onclick="closePairDetailsOverlay(); confirmUnmatchPartner()" class="unmatch-btn" style="width: 100%; max-width: 280px; margin: 0 auto;">
+        💔 Hủy Ghép Đôi
+      </button>
+    `;
+  }
+
+  // Common details
+  let contactHtml = '';
+  if (type === 'matched') {
+    contactHtml = `
+      <div><span class="label">📞 Điện thoại</span> <span class="value">${user.phone || 'Chưa cung cấp'}</span></div>
+      <div><span class="label">📧 Email</span> <span class="value">${user.email || 'Chưa cung cấp'}</span></div>
+      <div><span class="label">🔗 Facebook</span> <span class="value">${user.facebook ? `<a href="${user.facebook}" target="_blank" style="color: var(--uipro-primary); font-weight: 600;">Xem trang</a>` : 'Chưa cung cấp'}</span></div>
+    `;
+  }
+
+  overlay.innerHTML = `
+    <div style="width: 90%; max-width: 420px; background: var(--uipro-surface); border: 1px solid var(--uipro-border); border-radius: 24px; overflow: hidden; box-shadow: var(--uipro-shadow-lg); animation: modalScaleUp 0.35s var(--uipro-ease-spring);">
+      <div class="tinder-photo-area" style="background: ${gradient}; height: 300px; border-radius: 0;">
+        <h2>${initials}</h2>
+        <div class="tinder-photo-content">
+          <h3>${user.name}</h3>
+          ${statusHtml}
+        </div>
+      </div>
+      
+      <div class="tinder-user-details" style="display: flex; flex-wrap: wrap; padding: 20px; border-radius: 0; position: relative; gap: 12px; background: var(--uipro-surface);">
+        <div style="flex: 1; min-width: 120px;"><span class="label">🏷️ Lớp</span> <span class="value">${user.grade || '...'}</span></div>
+        <div style="flex: 1; min-width: 120px;"><span class="label">⏰ Rảnh</span> <span class="value">${user.time}</span></div>
+        <div style="width: 100%;"><span class="label">🎯 Mục tiêu</span> <span class="value">${user.goal}</span></div>
+        ${contactHtml}
+      </div>
+
+      <div class="tinder-actions" style="margin-top: -12px; padding-bottom: 20px; background: var(--uipro-surface);">
+        ${actionsHtml}
+      </div>
+    </div>
+  `;
+
+  overlay.style.display = 'flex';
+}
+
+function renderAvailableUsers() {
+  if (!cachedAvailableUsers) return;
+  const container = document.getElementById('availableUsers');
+  container.innerHTML = '';
+
+  const availableUsersList = cachedAvailableUsers.filter(u => u.pairStatus !== 'matched');
+  if (availableUsersList.length === 0) {
+    container.innerHTML = `
+      <div class="section-empty">
+        <div class="status-icon">🍃</div>
+        <div>Hiện tại khu vườn Triple D chưa có thêm bạn mới.<br><small style="opacity:0.7">Hãy quay lại sau một chút nhé!</small></div>
+      </div>
+    `;
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'users-grid compact-grid';
+
+  availableUsersList.forEach(u => {
+    const card = document.createElement('div');
+    card.className = 'user-pair-card compact';
+    
+    const initials = (u.name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const gradient = getGradientForName(u.name);
+    
+    card.innerHTML = `
+      <div class="tinder-photo-area compact-area" style="background: ${gradient};" onclick='showPairDetailsOverlay(${JSON.stringify(u)}, "available")'>
+        <h2>${initials}</h2>
+        <div class="tinder-photo-content">
+          <h3>${u.name}</h3>
+          <p>📍 ${u.school}</p>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+}
+
+function loadAvailableUsers() {
+  if (!currentUserId) return;
+  if (cachedAvailableUsers) {
+    renderAvailableUsers();
+  } else {
+    // If not cached yet, show loading state and fetch
+    document.getElementById('availableUsers').innerHTML = `
+      <div class="section-loading">
+        <div class="status-icon">💖</div>
+        <div>Đang tìm kiếm những người bạn đồng hành...</div>
+      </div>
+    `;
+    google.script.run.withSuccessHandler(users => {
+      cachedAvailableUsers = users;
+      renderAvailableUsers();
+    }).getAvailableUsers(currentUserId);
+  }
+}
+
+function requestPair(partnerId) {
+  if (!currentUserId) return;
+
+  showNotification('Đang kiểm tra trạng thái...', true, false);
+  google.script.run.withSuccessHandler(user => {
+    if (user.pairStatus === 'matched') {
+      hideNotification();
+      showNotification('Bạn đã ghép đôi, không thể gửi yêu cầu cho người khác.', false, true);
+      return;
+    }
+
+    google.script.run.withSuccessHandler(currentCoin => {
+      if (currentCoin < 1000) {
+        hideNotification();
+        showNotification('Bạn không đủ 1000 🪙 để gửi yêu cầu.', false, true);
+        triggerStudentReliefIfEligible();
+        return;
+      }
+
+      askUseCoin('Bạn có muốn sử dụng 1000 🪙 để gửi yêu cầu ghép đôi không?', () => {
+        google.script.run.withSuccessHandler(newTotal => {
+          if (newTotal === false) {
+            hideNotification();
+            showNotification('Lỗi khi trừ coin.', false, true);
+            return;
+          }
+
+          updatePointDisplay(newTotal);
+
+          showNotification('Đang gửi yêu cầu...', true, false);
+          google.script.run.withSuccessHandler(success => {
+            hideNotification();
+            if (success) {
+              showNotification('Yêu cầu đã gửi, chờ đối phương xác nhận.', false, true);
+              cachedAvailableUsers = null;
+              cachedIncomingRequests = null;
+              loadAvailableUsers();
+              loadIncomingRequests();
+            } else {
+              showNotification('Lỗi khi gửi yêu cầu.', false, true);
+            }
+          }).sendPairRequest(currentUserId, partnerId);
+        }).deductUserPoints(1000, "Phí yêu cầu ghép đôi");
+      }, hideNotification);
+    }).getUserPoints();
+  }).getUserInfo(currentUserId);
+}
+
+function renderIncomingRequests(isMatched = false) {
+  if (!cachedIncomingRequests) return;
+  const container = document.getElementById('incomingRequests');
+  container.innerHTML = '';
+  if (cachedIncomingRequests.length === 0) {
+    container.innerHTML = `
+      <div class="section-empty">
+        <div class="status-icon">✉️</div>
+        <div>Hộp thư đang trống trải.<br><small style="opacity:0.7">Những lời mời kết nối sẽ xuất hiện tại đây.</small></div>
+      </div>
+    `;
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'users-grid compact-grid';
+
+  cachedIncomingRequests.forEach(req => {
+    const card = document.createElement('div');
+    card.className = 'user-pair-card compact';
+    const initials = (req.name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const gradient = getGradientForName(req.name);
+
+    card.innerHTML = `
+      <div class="tinder-photo-area compact-area" style="background: ${gradient};" onclick='showPairDetailsOverlay(${JSON.stringify(req)}, "request", ${isMatched})'>
+        <h2>${initials}</h2>
+        <div class="tinder-photo-content">
+          <h3>${req.name}</h3>
+          <p>📍 ${req.school} &nbsp; • &nbsp; 📬 Đang chờ</p>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+}
+
+function loadIncomingRequests(isMatched = false) {
+  if (!currentUserId) return;
+  if(cachedIncomingRequests) {
+    renderIncomingRequests(isMatched);
+  } else {
+    document.getElementById('incomingRequests').innerHTML = `
+      <div class="section-loading">
+        <div class="status-icon">✉️</div>
+        <div>Đang kiểm tra hộp thư...</div>
+      </div>
+    `;
+    google.script.run.withSuccessHandler(requests => {
+      cachedIncomingRequests = requests;
+      renderIncomingRequests(isMatched);
+    }).getIncomingRequests(currentUserId);
+  }
+}
+
+function confirmPairRequest(requesterId) {
+  if (!currentUserId) return;
+  showNotification('Đang xử lý...', true, false);
+  google.script.run.withSuccessHandler(success => {
+    hideNotification();
+    if (success) {
+      showNotification('Đã ghép đôi thành công!', false, true);
+      refreshPairingData();
+    } else {
+      showNotification('Bạn hoặc đối phương đã ghép đôi trước đó.', false, true);
+    }
+  }).confirmPairRequest(currentUserId, requesterId);
+}
+
+// Load người đã ghép đôi
+function renderMatchedPartner() {
+  if (cachedMatchedPartner === null && typeof cachedMatchedPartner !== "undefined" && isPreloadingPairData) return; // Note we need to carefully handle undefined if it genuinely hasn't loaded 
+
+  const container = document.getElementById('matchedPartner');
+  container.innerHTML = '';
+  if (!cachedMatchedPartner) {
+    container.innerHTML = `
+      <div class="section-empty">
+        <div class="status-icon">💔</div>
+        <div>Bạn chưa có đồng đội nào.<br><small style="opacity:0.7">Hãy tìm kiếm và gửi yêu cầu kết nối nhé!</small></div>
+      </div>
+    `;
+    return;
+  }
+  
+  const initials = (cachedMatchedPartner.name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const gradient = getGradientForName(cachedMatchedPartner.name);
+  
+  container.innerHTML = `
+    <div class="user-pair-card" style="max-width: 400px; margin: 0 auto;">
+      <div class="tinder-photo-area" style="background: ${gradient};">
+        <h2>${initials}</h2>
+        <div class="tinder-photo-content">
+          <h3>${cachedMatchedPartner.name}</h3>
+          <p>📍 ${cachedMatchedPartner.school} &nbsp; • &nbsp; 💞 Đã ghép đôi</p>
+        </div>
+      </div>
+      
+      <div class="tinder-user-details" style="display: flex;">
+        <div><span class="label">🏷️ Lớp học</span> <span class="value">${cachedMatchedPartner.grade || '...'}</span></div>
+        <div><span class="label">⏰ Rảnh</span> <span class="value">${cachedMatchedPartner.time}</span></div>
+        <div><span class="label">🎯 Mục tiêu</span> <span class="value">${cachedMatchedPartner.goal}</span></div>
+        <div><span class="label">📞 Điện thoại</span> <span class="value">${cachedMatchedPartner.phone || 'Chưa cung cấp'}</span></div>
+        <div><span class="label">📧 Email</span> <span class="value">${cachedMatchedPartner.email || 'Chưa cung cấp'}</span></div>
+        <div><span class="label">🔗 Facebook</span> <span class="value">${cachedMatchedPartner.facebook ? `<a href="${cachedMatchedPartner.facebook}" target="_blank" style="color: #3b82f6;">Xem trang</a>` : 'Chưa cung cấp'}</span></div>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <button onclick="confirmUnmatchPartner()" class="unpair-btn" style="width: 100%; padding: 14px; border-radius: 16px; border: 1px solid #fee2e2; background: #fff1f2; color: #ef4444; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+          💔 Hủy Ghép Đôi
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function loadMatchedPartner() {
+  if (!currentUserId) return;
+  if (cachedMatchedPartner !== null || (cachedMatchedPartner === null && !isPreloadingPairData)) {
+    renderMatchedPartner(); // Note: we need a way to distinguish not yet loaded from null
+  }
+  
+  // To handle the distinction, we will just force load if it's strictly the first time.
+  // Wait, I should initialize cachedMatchedPartner to undefined instead of null.
+  // Let me just force a background fetch if needed.
+  if (typeof window.hasLoadedMatchedPartner === 'undefined') {
+     window.hasLoadedMatchedPartner = true;
+     document.getElementById('matchedPartner').innerHTML = `
+      <div class="section-loading">
+        <div class="status-icon">💔</div>
+        <div>Đang kiểm tra thông tin đồng đội...</div>
+      </div>
+     `;
+     google.script.run.withSuccessHandler(partner => {
+       cachedMatchedPartner = partner;
+       renderMatchedPartner();
+     }).getMatchedInfo(currentUserId);
+  } else {
+     renderMatchedPartner();
+  }
+}
+
+function confirmUnmatchPartner() {
+  showConfirmModal(
+    'Hủy ghép đôi? 💔',
+    'Bạn có chắc chắn muốn hủy ghép đôi với đối phương không? Mọi thông tin liên lạc và trạng thái ghép đôi sẽ bị gỡ bỏ.',
+    () => { unmatchPartner(); },
+    '💔',
+    'Hủy ghép đôi'
+  );
+}
+
+function unmatchPartner() {
+  if (!currentUserId) return;
+  showNotification('Đang hủy ghép đôi...', true, false);
+  google.script.run.withSuccessHandler(success => {
+    hideNotification();
+    if (success) {
+      showNotification('Đã hủy ghép đôi.', false, true);
+      refreshPairingData();
+    }
+  }).unmatchPair(currentUserId);
+}
+
+function togglePairForm() {
+  const form = document.getElementById('pairForm');
+  const sections = document.querySelectorAll('#pairingModal .section');
+  
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  const profileBtn = document.getElementById('profileTabBtn');
+  if (profileBtn) profileBtn.classList.add('active');
+
+  sections.forEach(sec => {
+    sec.style.display = 'none';
+    sec.classList.remove('active');
+  });
+  
+  if (form) {
+    form.style.display = 'block';
+    form.classList.add('active');
+  }
+}
+
+function toggleSection(sectionId) {
+  const sections = document.querySelectorAll('#pairingModal .section');
+  const selected = document.getElementById(sectionId);
+  const form = document.getElementById('pairForm');
+  
+  // always hide form
+  if (form) {
+    form.style.display = 'none';
+    form.classList.remove('active');
+  }
+
+  sections.forEach(sec => {
+    sec.style.display = 'none';
+    sec.classList.remove('active');
+  });
+  
+  if (selected) {
+    selected.style.display = 'block';
+    selected.classList.add('active');
+  }
+  
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.getAttribute('data-tab') === sectionId) {
+      btn.classList.add('active');
+    }
+  });
+}
+
+function declinePairRequestUI(requesterId) {
+  if (!currentUserId) return;
+  showNotification('Đang từ chối yêu cầu...', true, false);
+  google.script.run.withSuccessHandler(success => {
+    hideNotification();
+    if (success) {
+      showNotification('Đã từ chối yêu cầu.', false, true);
+      refreshPairingData();
+    } else {
+      showNotification('Lỗi khi từ chối yêu cầu.', false, true);
+    }
+  }).declinePairRequest(currentUserId, requesterId);
+}
+
+function askUseCoin(message, callbackYes, callbackNo) {
+  const overlay = document.getElementById('coinConfirmOverlay');
+  const msg = document.getElementById('coinMessage');
+  const btnYes = document.getElementById('coinYes');
+  const btnNo = document.getElementById('coinNo');
+
+  msg.textContent = message;
+  overlay.style.display = 'flex';
+  setTimeout(() => { overlay.style.opacity = '1'; }, 10);
+
+  btnYes.onclick = () => {
+    overlay.style.opacity = '0';
+    setTimeout(() => { overlay.style.display = 'none'; }, 300);
+    callbackYes();
+  };
+  btnNo.onclick = () => {
+    overlay.style.opacity = '0';
+    setTimeout(() => { overlay.style.display = 'none'; }, 300);
+    if (callbackNo) callbackNo();
+  };
+}
+
+function refreshPairingData() {
+  if (!currentUserId) return;
+
+  showNotification('Đang làm mới dữ liệu...', true, false);
+
+  // ❗ Xóa cache
+  cachedUserInfo = null;
+  cachedAvailableUsers = null;
+  cachedIncomingRequests = null;
+  cachedMatchedPartner = null;
+  window.hasLoadedMatchedPartner = undefined;
+
+  // Gọi lại server lấy user info mới nhất
+  google.script.run.withSuccessHandler(user => {
+    hideNotification();
+
+    cachedUserInfo = user;   // cache lại bản mới
+    applyUserInfoToUI(user); // vẽ lại toàn bộ UI
+
+    showNotification('Dữ liệu đã được cập nhật.', false, true);
+  }).getUserInfo(currentUserId);
+}
+
+// Ghép đôi
+
+
+
+
+// Đếm ngược - rút quẻ - lời chúc
+document.addEventListener("DOMContentLoaded", function() {
+  const DEFAULT_TARGET_DATE = "2026-12-26T00:00:00";
+  const DEFAULT_TARGET_NAME = "🎯 HSG Quốc Gia 2026";
+  
+  let targetDateStr = getCleanLocalStorage("customCountdownDate") || DEFAULT_TARGET_DATE;
+  let targetNameStr = getCleanLocalStorage("customCountdownName") || DEFAULT_TARGET_NAME;
+  let targetDate = new Date(targetDateStr).getTime();
+  
+  const cdTitleEl = document.getElementById("cd-title-text");
+  if (cdTitleEl) cdTitleEl.textContent = targetNameStr;
+
+  let countdownInterval;
+
+  function startCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    
+    // Khôi phục lại HTML nếu đã hiện thông báo
+    const countdownEl = document.getElementById("countdown");
+    if (countdownEl && (countdownEl.innerHTML.includes("Tới ngày") || countdownEl.innerHTML.includes("ngày thi"))) {
+        countdownEl.innerHTML = `
+            <div class="cd-unit-box"><span class="cd-num" id="cd-days">0</span><span class="cd-unit-label">ngày</span></div>
+            <span class="cd-colon">:</span>
+            <div class="cd-unit-box"><span class="cd-num" id="cd-hours">00</span><span class="cd-unit-label">giờ</span></div>
+            <span class="cd-colon">:</span>
+            <div class="cd-unit-box"><span class="cd-num" id="cd-minutes">00</span><span class="cd-unit-label">phút</span></div>
+            <span class="cd-colon">:</span>
+            <div class="cd-unit-box"><span class="cd-num" id="cd-seconds">00</span><span class="cd-unit-label">giây</span></div>
+        `;
+    }
+
+    countdownInterval = setInterval(function () {
+      const cdEl = document.getElementById("countdown");
+      if (!cdEl) return;
+
+      const now = new Date().getTime();
+      const diff = targetDate - now;
+
+      if (diff < 0) {
+        clearInterval(countdownInterval);
+        cdEl.innerHTML = "<div style='display:flex;align-items:center;gap:8px;background:rgba(245,158,11,0.12);padding:8px 18px;border-radius:12px;color:#db6e42;font-weight:750;font-size:0.92rem;border:1px solid rgba(245,158,11,0.25);'><span style='font-size:1.2rem;'>🎉</span> <span>Đã tới ngày mục tiêu! Tự tin tỏa sáng nhé!</span></div>";
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      const dEl = document.getElementById("cd-days");
+      const hEl = document.getElementById("cd-hours");
+      const mEl = document.getElementById("cd-minutes");
+      const sEl = document.getElementById("cd-seconds");
+
+      if (dEl) dEl.textContent = days;
+      if (hEl) hEl.textContent = hours.toString().padStart(2, '0');
+      if (mEl) mEl.textContent = minutes.toString().padStart(2, '0');
+      if (sEl) sEl.textContent = seconds.toString().padStart(2, '0');
+    }, 1000);
+  }
+
+  startCountdown();
+
+  // Xử lý nút Tùy chỉnh đếm ngược
+  const btnEditCd = document.getElementById("btn-edit-cd");
+  const modalCdSettings = document.getElementById("cdSettingsModal");
+  const btnCloseCdModal = document.getElementById("btn-close-cd-modal");
+  const btnSaveCd = document.getElementById("btnSaveCd");
+  const btnResetCd = document.getElementById("btnResetCd");
+  
+  const cdNameInput = document.getElementById("cdNameInput");
+  const cdDateInput = document.getElementById("cdDateInput");
+
+  if (btnEditCd && modalCdSettings) {
+    btnEditCd.onclick = function() {
+      cdNameInput.value = targetNameStr;
+      
+      const d = new Date(targetDateStr);
+      if (!isNaN(d.getTime())) {
+        const tzoffset = d.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(d.getTime() - tzoffset)).toISOString().slice(0, 16);
+        cdDateInput.value = localISOTime;
+      }
+      
+      modalCdSettings.style.display = "flex";
+      // Trigger animation
+      setTimeout(() => {
+        modalCdSettings.style.opacity = "1";
+        const contentBox = modalCdSettings.children[0];
+        if(contentBox) contentBox.style.transform = "scale(1) translateY(0)";
+      }, 10);
+    };
+  }
+
+  function closeCdModal() {
+    if(!modalCdSettings) return;
+    modalCdSettings.style.opacity = "0";
+    const contentBox = modalCdSettings.children[0];
+    if(contentBox) contentBox.style.transform = "scale(0.95) translateY(10px)";
+    setTimeout(() => {
+      modalCdSettings.style.display = "none";
+    }, 300);
+  }
+
+  if (btnCloseCdModal) {
+    btnCloseCdModal.onclick = closeCdModal;
+  }
+
+  if (btnSaveCd) {
+    btnSaveCd.onclick = function() {
+      const newName = cdNameInput.value.trim();
+      const newDate = cdDateInput.value;
+      if (!newName || !newDate) {
+        showToast("Vui lòng nhập đầy đủ tên kỳ thi và ngày thi.", "error");
+        return;
+      }
+      
+      targetNameStr = newName;
+      targetDateStr = newDate;
+      targetDate = new Date(newDate).getTime();
+      
+      localStorage.setItem("customCountdownName", targetNameStr);
+      localStorage.setItem("customCountdownDate", targetDateStr);
+      
+      if (cdTitleEl) cdTitleEl.textContent = targetNameStr;
+      
+      startCountdown();
+      closeCdModal();
+      showToast("Đã cập nhật đếm ngược thành công!", "success");
+    };
+  }
+
+  if (btnResetCd) {
+    btnResetCd.onclick = function() {
+      targetNameStr = DEFAULT_TARGET_NAME;
+      targetDateStr = DEFAULT_TARGET_DATE;
+      targetDate = new Date(DEFAULT_TARGET_DATE).getTime();
+      
+      localStorage.removeItem("customCountdownName");
+      localStorage.removeItem("customCountdownDate");
+      
+      if (cdTitleEl) cdTitleEl.textContent = targetNameStr;
+      
+      startCountdown();
+      closeCdModal();
+      showToast("Đã khôi phục đếm ngược mặc định!", "success");
+    };
+  }
+
+  const closeBtn = document.getElementById("cd-close");
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      const box = document.getElementById("countdownBox");
+      if (box) box.style.display = "none";
+    };
+  }
+
+  // Danh sách thông điệp ấm áp, tiếp thêm niềm tin & chữa lành
+  const quotes = [
+    "Mỗi trang sách bạn lật giở hôm nay là một bước vững vàng tiến gần hơn đến ước mơ của chính bạn. 🌟",
+    "Đừng vội so sánh bước đi của mình với người khác. Bạn đang tỏa sáng theo một lịch trình tuyệt vời của riêng bạn. 🌸",
+    "Khi cảm thấy mệt mỏi, hãy cho phép mình nghỉ ngơi một chút rồi lại bước tiếp. Quan trọng là bạn không bao giờ bỏ cuộc. ☕",
+    "Sự nỗ lực bền bỉ và âm thầm của bạn hôm nay sẽ kết trái thành niềm tự hào rạng rỡ ngày mai. ✨",
+    "Núi dẫu cao nghìn trượng cũng có đỉnh, bài dẫu khó đến đâu cũng có hướng tư duy. Hãy bình tĩnh tháo gỡ từng nút thắt nhé! 💡",
+    "Bạn giỏi hơn bạn nghĩ rất nhiều. Hãy tin vào khả năng và sự chuẩn bị của chính mình! 💖",
+    "Mỗi giọt mồ hôi và công sức bạn bỏ ra hôm nay đều đang tích lũy thành nguồn sức mạnh vô giá. 💎",
+    "Hãy giữ cho tâm trí thật thảnh thơi, hít một hơi thật sâu và bắt đầu giải quyết từng mục tiêu nhỏ. 🍃",
+    "Không có con đường nào là vô ích, mọi bài học và thử thách đều đang tôi luyện một phiên bản kiên cường hơn của bạn. 🚀",
+    "Sự kỷ luật và dịu dàng với bản thân là chiếc chìa khóa mở ra những cánh cửa bất ngờ. 🔑",
+    "Dù hôm nay thế nào, bạn đã làm rất tốt khi kiên trì đến giờ phút này. Chúc bạn một ngày học tập an vui và hiệu quả! 🌿",
+    "Kỳ thi chỉ là một cột mốc, sự trưởng thành và tri thức mới là tài sản đi cùng bạn suốt cuộc đời. 🎯",
+    "Hãy mỉm cười, uống một ngụm nước ấm và nhắc nhở mình rằng: 'Mình có thể làm được!' 🌈",
+    "Mỗi ngày tiến bộ 1% thôi, sau một hành trình dài bạn sẽ ngạc nhiên vì sự bứt phá phi thường của chính mình. 📈",
+    "Thời gian bạn dành cho tri thức không bao giờ là lãng phí. Nó sẽ đơm hoa kết trái đúng lúc và rực rỡ nhất. 🌺",
+    "Đừng để sự lo âu lấn át niềm say mê khám phá. Hãy học với một trái tim tò mò và thảnh thơi. 🕊️",
+    "Bạn luôn có đủ sức mạnh và sự sáng suốt bên trong để đối diện với mọi đề thi và thử thách. 💪",
+    "Hạnh phúc là hành trình tích lũy kiến thức mỗi ngày, không chỉ là đích đến. Hãy tận hưởng từng khoảnh khắc học tập này nhé! ☀️",
+    "Nếu bài tập hôm nay quá khó, hãy chia nhỏ nó ra. Vạn dặm đường dài cũng bắt đầu từ một bước chân giản đơn. 🐾",
+    "Bầu trời đêm càng tối thì những vì sao càng sáng rực. Bạn chính là vì sao lấp lánh trên hành trình này! ⭐"
+  ];
+
+  // Danh sách quẻ lành may mắn, tuyệt đối tích cực và đầy niềm tin
+  const fortunes = [
+    {
+      badge: "🌸 Quẻ Đại Cát – Vạn Sự Khởi Sắc",
+      blessing: "Vận may hội tụ, tâm trí thông suốt và minh mẫn. Mọi kế hoạch ôn luyện đều diễn ra suôn sẻ, bài khó đến mấy cũng nhìn ra điểm mấu chốt.",
+      tip: "Hôm nay hãy ưu tiên giải quyết các dạng đề trọng tâm, hiệu quả tiếp thu sẽ đạt mức cao nhất!"
+    },
+    {
+      badge: "✨ Quẻ Khai Sáng – Tuệ Giác Vươn Xa",
+      blessing: "Tư duy nhạy bén lạ kỳ, trực giác giải bài và lập luận logic đạt độ chính xác cao. Cảm hứng sáng tạo dồi dào.",
+      tip: "Thử sức với một bài tập nâng cao hoặc mở rộng góc nhìn mới, bạn sẽ khám phá ra tiềm năng bất ngờ của mình."
+    },
+    {
+      badge: "🕊️ Quẻ Bình An – Tâm Tịnh Trí Minh",
+      blessing: "Lòng nhẹ nhàng như mây trời, mọi lo âu căng thẳng tan biến, giúp bạn học đâu nhớ đó và duy trì sự tập trung sâu sắc.",
+      tip: "Dành 5 phút hít thở sâu, uống một cốc trà ấm và học bài trong không gian thật gọn gàng nhé."
+    },
+    {
+      badge: "🌟 Quẻ Tinh Tấn – Năng Lượng Đột Phá",
+      blessing: "Nhiệt huyết học tập dâng cao, phong độ ổn định vững vàng. Bạn vượt qua sự trì hoãn một cách dễ dàng và đầy tự tin.",
+      tip: "Ghi lại 3 mục tiêu trọng tâm cần hoàn thành hôm nay và thực hiện dứt điểm từng việc."
+    },
+    {
+      badge: "🍀 Quẻ May Mắn – Mọi Cửa Đều Mở",
+      blessing: "Điềm lành cát tường! Những kiến thức bạn vừa xem lại rất dễ trúng vào những phần quan trọng. May mắn luôn đồng hành cùng bạn.",
+      tip: "Hãy tự tin vào những gì mình đã ôn luyện và chủ động trao đổi với bạn bè, thầy cô."
+    },
+    {
+      badge: "💎 Quẻ Vững Vàng – Từng Bước Chắc Chắn",
+      blessing: "Nền tảng kiến thức được củng cố kiên cố. Mọi nỗ lực tích lũy bấy lâu bắt đầu phát huy sức mạnh, giúp bạn an tâm tuyệt đối.",
+      tip: "Dành chút thời gian hệ thống lại sơ đồ tư duy hoặc tóm tắt công thức cốt lõi."
+    },
+    {
+      badge: "🎯 Quẻ Tập Trung – Thẩm Thấu Đỉnh Cao",
+      blessing: "Độ tập trung cao độ, không gian xung quanh trở nên tĩnh lặng để bạn tiếp thu kiến thức nhanh gấp đôi thường ngày.",
+      tip: "Tắt thông báo điện thoại trong 45 phút học tập liên tục để tận hưởng trạng thái 'dòng chảy' (flow)."
+    },
+    {
+      badge: "🌿 Quẻ Thư Thái – Tái Tạo Bứt Phá",
+      blessing: "Năng lượng phục hồi trọn vẹn, cơ thể khỏe khoắn, trí não tỉnh táo và sảng khoái. Một ngày học tập vui vẻ không áp lực.",
+      tip: "Nhớ vận động nhẹ nhàng sau mỗi giờ học và đừng thức quá khuya nhé."
+    },
+    {
+      badge: "🚀 Quẻ Thăng Hoa – Bứt Phá Giới Hạn",
+      blessing: "Đột phá ngoạn mục! Bạn sẽ vượt qua được rào cản tâm lý ở một phần kiến thức từng thấy khó, mở ra bước tiến mới.",
+      tip: "Đừng ngần ngại làm lại những bài tập mình từng sai để biến nó thành điểm mạnh."
+    },
+    {
+      badge: "🌞 Quẻ Rạng Rỡ – Tự Tin Tỏa Sáng",
+      blessing: "Khí chất tự tin và điềm tĩnh lan tỏa. Bạn làm chủ được tâm trạng, tự tin đối diện với mọi dạng đề hay bài kiểm tra.",
+      tip: "Hãy soi gương và tặng cho chính mình một nụ cười rạng rỡ trước khi ngồi vào bàn học!"
+    },
+    {
+      badge: "🤝 Quẻ Quý Nhân – Luôn Được Dẫn Lối",
+      blessing: "Gặp gỡ những lời khuyên hữu ích từ thầy cô, bạn bè hoặc tình cờ đọc được tài liệu quý giúp tháo gỡ vướng mắc.",
+      tip: "Nếu có chỗ chưa hiểu rõ, hãy cởi mở hỏi ngay người xung quanh để mở rộng hiểu biết."
+    },
+    {
+      badge: "🌈 Quẻ Hy Vọng – Tương Lai Xán Lạn",
+      blessing: "Bức tranh tương lai tươi sáng đang dần hiện rõ. Mỗi giờ học hôm nay đều đang dệt nên thành công viên mãn cho bạn.",
+      tip: "Hãy hình dung khoảnh khắc bạn đạt được kết quả như ý để nạp thêm động lực phi thường."
+    }
+  ];
+
+  const luckBox = document.getElementById("luckBox");
+  const luckText = document.getElementById("luckText");
+  const luckClose = document.getElementById("luckClose");
+  const luckCloseIcon = document.getElementById("luckCloseIcon");
+  const luckTitle = document.getElementById("luckTitle");
+  const luckSubtitle = document.getElementById("luckSubtitle");
+  const luckRefreshBtn = document.getElementById("luckRefreshBtn");
+  const luckModalBackdrop = document.getElementById("luckModalBackdrop");
+
+  let lastQuoteIndex = -1;
+
+  function showLuckQuote() {
+    let randIndex;
+    do {
+      randIndex = Math.floor(Math.random() * quotes.length);
+    } while (quotes.length > 1 && randIndex === lastQuoteIndex);
+    lastQuoteIndex = randIndex;
+
+    const quoteStr = quotes[randIndex];
+    if (luckTitle) luckTitle.textContent = "Thông Điệp Dành Cho Bạn";
+    if (luckSubtitle) luckSubtitle.textContent = "Tiếp thêm năng lượng bình an & vững tin";
+    
+    if (luckBox) {
+      const iconEl = luckBox.querySelector('.luck-modal-icon');
+      if (iconEl) iconEl.textContent = "✨";
+    }
+
+    if (luckText) {
+      luckText.innerHTML = `<p style="margin: 0; font-size: 1.02rem; line-height: 1.65; color: inherit; font-weight: 500;">${quoteStr}</p>`;
+    }
+
+    if (luckRefreshBtn) luckRefreshBtn.style.display = "inline-flex";
+    if (luckClose) {
+      const btnSpan = luckClose.querySelector('span') || luckClose;
+      btnSpan.textContent = "Trân trọng & Cố gắng ✨";
+    }
+
+    if (luckBox) luckBox.style.display = "flex";
+  }
+
+  function showLuckFortune(fortuneObj) {
+    if (luckTitle) luckTitle.textContent = "Quẻ Lành Hôm Nay";
+    if (luckSubtitle) luckSubtitle.textContent = "Điềm cát tường & lời khuyên ấm áp";
+
+    if (luckBox) {
+      const iconEl = luckBox.querySelector('.luck-modal-icon');
+      if (iconEl) iconEl.textContent = "🍀";
+    }
+
+    if (luckText) {
+      luckText.innerHTML = `
+        <div class="fortune-card-wrapper">
+          <div class="fortune-badge-header">${fortuneObj.badge}</div>
+          <div class="fortune-blessing-text">${fortuneObj.blessing}</div>
+          <div class="fortune-warm-tip">
+            <span style="font-size: 14px; flex-shrink: 0;">💡</span>
+            <span><b>Lời khuyên:</b> ${fortuneObj.tip}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (luckRefreshBtn) luckRefreshBtn.style.display = "none";
+    if (luckClose) {
+      const btnSpan = luckClose.querySelector('span') || luckClose;
+      btnSpan.textContent = "Đón nhận điều lành 🍀";
+    }
+
+    if (luckBox) luckBox.style.display = "flex";
+  }
+
+  function showLuck(text, title = "Thông Điệp Dành Cho Bạn", icon = "✨", subtitle = "Tiếp thêm năng lượng bình an & vững tin") {
+    if (luckText && luckBox) {
+      luckText.innerHTML = text;
+      if (luckTitle) luckTitle.textContent = title;
+      if (luckSubtitle) luckSubtitle.textContent = subtitle;
+      const iconEl = luckBox.querySelector('.luck-modal-icon');
+      if (iconEl) iconEl.textContent = icon;
+      if (luckRefreshBtn) luckRefreshBtn.style.display = "none";
+      if (luckClose) {
+        const btnSpan = luckClose.querySelector('span') || luckClose;
+        btnSpan.textContent = "Đã hiểu ✨";
+      }
+      luckBox.style.display = "flex";
+    }
+  }
+
+  const btnQuote = document.getElementById("btn-quote");
+  if (btnQuote) {
+    btnQuote.onclick = () => {
+      showLuckQuote();
+    };
+  }
+
+  if (luckRefreshBtn) {
+    luckRefreshBtn.onclick = () => {
+      showLuckQuote();
+    };
+  }
+
+  const btnFortune = document.getElementById("btn-fortune");
+  if (btnFortune) {
+    btnFortune.onclick = () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const lastDraw = getCleanLocalStorage("lastFortuneDate");
+
+      if (lastDraw === today) {
+        showLuck(
+          "<div style='text-align: center; padding: 4px 0;'><p style='margin-bottom: 10px; font-weight: 600; color: inherit;'>Hôm nay bạn đã đón nhận quẻ lành rồi! 🌸</p><p style='margin: 0; font-size: 0.92rem; color: #64748b;'>Hãy giữ trọn vẹn sự bình an và nỗ lực hết mình nhé. Bạn có thể nhấn xem thêm <b>'✨ Thông điệp'</b> bất cứ lúc nào!</p></div>",
+          "Đã Nhận Quẻ Hôm Nay",
+          "🌟",
+          "Giữ vững năng lượng tích cực"
+        );
+        return;
+      }
+
+      localStorage.setItem("lastFortuneDate", today);
+      const chosenFortune = fortunes[Math.floor(Math.random() * fortunes.length)];
+      showLuckFortune(chosenFortune);
+    };
+  }
+
+  function closeLuckModal() {
+    if (luckBox) luckBox.style.display = "none";
+  }
+
+  window.closeLuckModal = closeLuckModal;
+
+  if (luckClose) luckClose.onclick = closeLuckModal;
+  if (luckCloseIcon) luckCloseIcon.onclick = closeLuckModal;
+  if (luckModalBackdrop) luckModalBackdrop.onclick = closeLuckModal;
+});
+// Đếm ngược - rút quẻ - lời chúc
+
+
+
+// Ẩn Thanh Header
+const header = document.querySelector("header");
+
+function toggleCompact() {
+  document.body.classList.toggle("compact-header");
+}
+
+/* 👉 nút 📖 */
+const focusToggleEl = document.querySelector(".focus-toggle");
+if (focusToggleEl) {
+  focusToggleEl.addEventListener("click", function(e) {
+    e.stopPropagation();
+    toggleCompact();
+  });
+}
+
+/* 👉 click header để bung */
+const headerContainerEl = document.querySelector("header");
+if (headerContainerEl) {
+  headerContainerEl.addEventListener("mousedown", function(e) {
+    if (e.target.closest(".focus-toggle")) return;
+
+    if (document.body.classList.contains("compact-header")) {
+      e.preventDefault();
+
+      setTimeout(() => {
+        toggleCompact();
+      }, 0); // 👈 đợi click hoàn tất
+    }
+  });
+}
+
+
+</script>

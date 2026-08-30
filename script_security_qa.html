@@ -1,0 +1,4124 @@
+<script>
+// ========================
+// Upload từ dataURL
+// ========================
+function uploadScreenshotFromDataUrl(screenDataUrl, cameraDataUrl) {
+  if (isScreenshotUploading) {
+    // Nếu đang upload thì bỏ qua frame này để tránh nghẽn Apps Script
+    return;
+  }
+
+  const screenBase64 = screenDataUrl ? screenDataUrl.split(",")[1] : null;
+  const camBase64 = cameraDataUrl ? cameraDataUrl.split(",")[1] : null;
+  const email = sessionStorage.getItem("userEmail");
+  if (!email) return;
+
+  // Nếu đang yêu cầu camera mà thiếu 1 trong 2 thì không tải lên để tránh dữ liệu lỗi
+  if (window.currentShareHasCamera && (!screenBase64 || !camBase64)) {
+    console.warn("⚠️ Bỏ qua frame upload do không đủ cặp dữ liệu camera + màn hình.");
+    return;
+  }
+
+  isScreenshotUploading = true;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      isScreenshotUploading = false;
+      if (res && res.success) {
+        if (res.folderId) {
+          cachedFolderId = res.folderId;
+        }
+      } else {
+        // console.warn("Upload failed on server:", res ? res.error : "Unknown error");
+      }
+    })
+    .withFailureHandler(err => {
+      isScreenshotUploading = false;
+      // console.error("Upload network failed:", err);
+    })
+    .saveScreenshotPair(screenBase64, camBase64, email, cachedFolderId);
+}
+
+
+// 4. Load khóa học (ép buộc share toàn màn hình)
+// ========================
+async function loadCourses() {
+  const myToken = loadToken;
+    // 🔴 CHẶN nếu đã bật F11 trước khi mở khóa học (Bypass cho ADMIN)
+  if (isBrowserFullscreen() && currentUserRole !== 'ADMIN') {
+    showToast("Không được bật Full Screen khi mở khóa học.");
+    currentView = null;
+    return "";
+  }
+  // Chỉ yêu cầu share khi không phải mobile/tablet và không phải ADMIN
+  if (!isMobileOrTablet() && currentUserRole !== 'ADMIN' && !window.screenShareNotRequired) {
+    // Nếu popup hiện tại đang bật camera (từ thi thử), đóng lại để lấy chính xác quyền cho khóa học (tránh ép bật camera oan)
+    if (window.isScreenShareActive && window.currentShareHasCamera && currentPopup && !currentPopup.closed) {
+      currentPopup.close();
+      window.isScreenShareActive = false;
+      window.currentShareHasCamera = false;
+    }
+
+    if (!window.isScreenShareActive && (!currentPopup || currentPopup.closed)) {
+      try {
+        await requestScreenShare();
+      } catch (err) {
+        if (myToken !== loadToken) return "";
+        const courseListEl = document.getElementById("courseList");
+        if (courseListEl) {
+          courseListEl.innerHTML = `
+            <div class="tds-central-state" style="padding: 30px 16px; text-align: center;">
+              <div class="tds-state-icon" style="font-size: 2.5rem; margin-bottom: 10px;">📡</div>
+              <div class="tds-state-title" style="font-weight: 700; color: #ef4444; font-size: 1rem; margin-bottom: 6px;">Yêu cầu Chia Sẻ Màn Hình</div>
+              <div class="tds-state-message" style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">
+                Bạn chưa bật chia sẻ toàn màn hình. Vui lòng bấm nút bên dưới để bật chia sẻ và xem khóa học.
+              </div>
+              <button onclick="loadCourses()" style="padding: 10px 18px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.88rem;">
+                🔄 Bật Chia Sẻ Màn Hình
+              </button>
+            </div>
+          `;
+        }
+        return "";
+      }
+    }
+  } else {
+  }
+
+  if (myToken !== loadToken) return;
+
+  const loading = document.getElementById("loadingCourse");
+
+  // ⚡ Step 3: Stale-While-Revalidate - Hiển thị ngay từ cache local nếu có
+  const cachedCourses = TDSStorageCache.getAny("courses");
+  if (cachedCourses && Array.isArray(cachedCourses) && cachedCourses.length > 0) {
+    allCourses = cachedCourses;
+    if (currentView === "courses") {
+      renderCourseList(allCourses);
+      if (loading) loading.style.display = "none";
+    }
+  } else {
+    if (loading) loading.style.display = "flex";
+  }
+
+  // Tải ngầm bản mới nhất từ GAS để Revalidate
+  google.script.run.withSuccessHandler(function(courses){
+    if (myToken !== loadToken) return;
+    if (courses && Array.isArray(courses)) {
+      TDSStorageCache.set("courses", courses);
+      if (currentView !== "courses") return;
+      if (JSON.stringify(allCourses) !== JSON.stringify(courses)) {
+        allCourses = courses;
+        renderCourseList(allCourses);
+      }
+      if (loading) loading.style.display = "none";
+    }
+  }).getCourses();
+
+  return "";
+}
+
+
+// 5. Hàm kiểm tra mobile / tablet (Nhận diện chính xác điện thoại, máy tính bảng iPad/Tablet, đảm bảo KHÔNG nhầm lẫn)
+// ========================
+function isMobileOrTablet() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+
+  // 1. Nhận diện iPad & iPadOS (iPadOS 13+ gửi User-Agent Macintosh/MacIntel nhưng có maxTouchPoints > 1)
+  const isIpadOS = /iPad/i.test(ua) ||
+                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                   (/Macintosh|Mac OS X/i.test(ua) && navigator.maxTouchPoints > 1);
+
+  if (isIpadOS) return true;
+
+  // 2. Nhận diện các thiết bị di động rõ ràng (iPhone, iPod, Android, Mobile, Tablet)
+  const isMobileUA = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
+  if (isMobileUA) return true;
+
+  // 3. Kiểm tra API navigator.userAgentData (Chrome / Edge hiện đại)
+  if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+    if (navigator.userAgentData.mobile === true) {
+      return true; // Chắc chắn là Mobile / Tablet
+    }
+    if (navigator.userAgentData.mobile === false && !isIpadOS) {
+      return false; // Chắc chắn là PC / Laptop
+    }
+  }
+
+  // 4. Nhận diện các Hệ điều hành Máy tính thực sự (Windows, macOS thực sự, Linux Desktop, ChromeOS)
+  const isWindows = /Windows NT|Win32|Win64|WOW64/i.test(ua);
+  const isMac = /Macintosh|Mac OS X/i.test(ua);
+  const isLinuxDesktop = /Linux x86_64|X11;/i.test(ua) && !/Android/i.test(ua);
+  const isChromeOS = /CrOS/i.test(ua);
+
+  // Nếu là hệ điều hành máy tính thực sự (không phải iPadOS) -> KHÔNG LÀ MOBILE/TABLET
+  if (isWindows || (isMac && !isIpadOS) || isLinuxDesktop || isChromeOS) {
+    return false;
+  }
+
+  // 5. Trường hợp dự phòng nếu không xác định được UA: kiểm tra cảm ứng & màn hình di động
+  const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (hasTouch && window.matchMedia && window.matchMedia('(pointer: coarse)').matches && window.innerWidth <= 1024) {
+    return true;
+  }
+
+  return false;
+}
+
+
+// Kiểm Tra Thay Màn Hình
+function normalizeScreenDimensions(s) {
+  if (!s) return "";
+  var res = s.split('x')
+          .map(function(val) { return Math.floor(Number(val)); })
+          .filter(function(n) { return !isNaN(n); })
+          .sort(function(x, y) { return x - y; })
+          .join('x');
+  return res;
+}
+let screenCheckInterval = null;
+function startPeriodicScreenCheck() {
+  if (screenCheckInterval) return; // 🟢 Đã chạy rồi thì không chạy thêm
+
+  const email = sessionStorage.getItem("userEmail");
+  if (!email) {
+    console.warn("⛔ Không có email trong sessionStorage");
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler((storedDeviceObj) => {
+
+      const rawScreen = `${window.screen.width}x${window.screen.height}`;
+      const currentScreenNormalized = normalizeScreenDimensions(rawScreen);
+      const storedScreenNormalized = normalizeScreenDimensions(storedDeviceObj ? storedDeviceObj.screen : "");
+      
+      // console.log("🖥️ Màn hình hiện tại (raw):", rawScreen);
+      // console.log("🖥️ Màn hình hiện tại (normalized):", currentScreenNormalized);
+      // console.log("🖥️ Màn hình đã lưu (normalized):", storedScreenNormalized);
+
+      if (storedDeviceObj && storedScreenNormalized !== currentScreenNormalized) {
+        // console.warn("⚠️ Phát hiện thay đổi màn hình! Đã ẩn khóa học.");
+
+        google.script.run.logScreenChange(email, rawScreen);
+
+        const panel = document.getElementById("bookPanel");
+        const viewer = document.getElementById("bookViewer");
+        if (panel) panel.style.display = "none";
+        if (viewer) viewer.innerHTML = "";
+        currentView = null;
+
+        showToast("Phát hiện thay đổi màn hình. Khóa học đã bị tạm dừng vì lý do bảo mật.");
+        return;
+      }
+
+      screenCheckInterval = setInterval(() => {
+        const rawScreenLoop = `${window.screen.width}x${window.screen.height}`;
+        const currentScreenNormalizedLoop = normalizeScreenDimensions(rawScreenLoop);
+
+        if (storedDeviceObj && storedScreenNormalized !== currentScreenNormalizedLoop) {
+          // console.warn("⚠️ Phát hiện thay đổi màn hình trong quá trình học!");
+
+          // 👉 GHI LOG
+          google.script.run.logScreenChange(email, rawScreenLoop);
+
+          const panel = document.getElementById("bookPanel");
+          const viewer = document.getElementById("bookViewer");
+          if (panel) panel.style.display = "none";
+          if (viewer) viewer.innerHTML = "";
+          currentView = null;
+
+          showToast("Màn hình đã thay đổi. Khóa học bị tạm dừng.");
+
+          clearInterval(screenCheckInterval);
+          screenCheckInterval = null;
+        }
+      }, 30000);
+    })
+    .getDeviceInfoFromSheet(email);
+}
+// Kiểm Tra Thay Màn Hình
+
+
+
+// 🌟 Global Spinner
+function showGlobalSpinner(text = "Đang xử lý...") {
+  const overlay = document.getElementById("globalSpinnerOverlay");
+  const textEl = document.getElementById("globalSpinnerText");
+  if (overlay) {
+    if (textEl) textEl.textContent = text;
+    overlay.style.display = "flex";
+    setTimeout(() => overlay.style.opacity = "1", 10);
+  }
+}
+
+function hideGlobalSpinner() {
+  const overlay = document.getElementById("globalSpinnerOverlay");
+  if (overlay) {
+    overlay.style.opacity = "0";
+    setTimeout(() => overlay.style.display = "none", 300);
+  }
+}
+
+// 🌟 Toast hiện đại, căn giữa và hiệu ứng mượt
+function showToast(message, type = null, duration = 4000, action = null) {
+  const oldToast = document.querySelector(".tds-toast");
+  if (oldToast) oldToast.remove();
+
+  // 1. Auto-detect type if not explicitly set
+  let detectedType = type;
+  if (!detectedType) {
+    const msgLower = (message || "").toLowerCase();
+    if (message.includes("⚠️") || msgLower.includes("cảnh báo") || msgLower.includes("quy chế") || msgLower.includes("yêu cầu") || msgLower.includes("cần có")) {
+      detectedType = "warning";
+    } else if (message.includes("✅") || message.includes("✨") || message.includes("🎉") || msgLower.includes("thành công") || msgLower.includes("tuyệt vời")) {
+      detectedType = "success";
+    } else if (message.includes("❌") || msgLower.includes("lỗi") || msgLower.includes("thất bại") || msgLower.includes("bị hủy") || msgLower.includes("đã chặn") || msgLower.includes("không thể") || msgLower.includes("không hợp lệ")) {
+      detectedType = "error";
+    } else if (message.includes("🔍") || message.includes("⏳") || msgLower.includes("đang") || msgLower.includes("tìm kiếm") || msgLower.includes("tiến hành")) {
+      detectedType = "info";
+    } else {
+      detectedType = "info"; // Safe, non-intrusive default
+    }
+  }
+
+  // Normalize standard types
+  if (detectedType === "loading" || detectedType === "search") {
+    detectedType = "info";
+  }
+
+  let cleanMessage = message;
+  let icon = "💡";
+  
+  if (detectedType === "success") {
+    icon = "✅";
+  } else if (detectedType === "error") {
+    icon = "❌";
+  } else if (detectedType === "warning") {
+    icon = "⚠️";
+  } else if (detectedType === "info") {
+    icon = "💡";
+  }
+  
+  // Custom icons and clean up double-emoji prefixes
+  if (message.startsWith("🔍")) {
+    icon = "🔍";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("⏳")) {
+    icon = "⏳";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("⚠️")) {
+    icon = "⚠️";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("✅")) {
+    icon = "✅";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("✨")) {
+    icon = "✨";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("🎉")) {
+    icon = "🎉";
+    cleanMessage = message.substring(2).trim();
+  } else if (message.startsWith("❌")) {
+    icon = "❌";
+    cleanMessage = message.substring(2).trim();
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `tds-toast ${detectedType}`;
+  
+  toast.innerHTML = `
+    <div class="tds-toast-icon">${icon}</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; min-width: 0;">
+      <span style="flex: 1; min-width: 0; text-align: left;">${cleanMessage.replace(/\\n/g, "<br>")}</span>
+      ${action ? `<button onclick="${action.onclick}" class="toast-action-btn">${action.text}</button>` : ''}
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Trigger animation
+  setTimeout(() => toast.classList.add("show"), 10);
+
+  // Remove after specified duration
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 400);
+  }, duration || 4000);
+}
+
+// Helper thông báo popup tùy chỉnh đẹp mắt bằng SweetAlert2 thay thế alert mặc định
+function showCustomAlert(titleOrMsg, message = "", icon = 'info') {
+  let finalTitle = titleOrMsg;
+  let finalMsg = message;
+  if (!message) {
+    finalTitle = "Thông báo";
+    finalMsg = titleOrMsg;
+  }
+  
+  // Tự động nhận diện icon dựa trên từ khóa nếu icon mặc định là 'info'
+  if (icon === 'info') {
+    const lower = finalMsg.toLowerCase();
+    if (lower.includes("lỗi") || lower.includes("thất bại") || lower.includes("không thể") || lower.includes("❌")) {
+      icon = 'error';
+    } else if (lower.includes("thành công") || lower.includes("✓") || lower.includes("🎉") || lower.includes("hoàn tất") || lower.includes("đã lưu")) {
+      icon = 'success';
+    } else if (lower.includes("⚠️") || lower.includes("cảnh báo") || lower.includes("vượt quá") || lower.includes("lớn") || lower.includes("quá nặng")) {
+      icon = 'warning';
+    }
+  }
+
+  const isDark = document.body.classList.contains("dark-mode");
+  return Swal.fire({
+    title: finalTitle,
+    html: finalMsg.replace(/\n/g, "<br>"),
+    icon: icon,
+    background: isDark ? '#1e293b' : '#ffffff',
+    color: isDark ? '#f1f5f9' : '#0f172a',
+    confirmButtonColor: '#3b82f6',
+    confirmButtonText: 'Đã Hiểu',
+    customClass: {
+      popup: 'rounded-2xl border border-slate-200 dark:border-slate-800 font-sans'
+    }
+  });
+}
+
+
+// 🚫 Phát hiện F11 fullscreen (không dùng Fullscreen API)
+// ========================
+// Kiểm tra F11 fullscreen
+// ========================
+function isBrowserFullscreen() {
+  return Math.abs(window.innerHeight - window.screen.height) < 5;
+}
+let previousHeight = window.innerHeight;
+
+window.addEventListener("resize", () => {
+  const isF11 = isBrowserFullscreen();
+  const isMockExamWithoutState = currentView === "mockExams" && (typeof mockExamState === 'undefined' || !mockExamState.active);
+  if (isF11 && (currentView === "courses" || isMockExamWithoutState)) {
+    console.warn("⚠️ PHÁT HIỆN F11 FULL SCREEN!");
+
+    // 🟥 1. ĐÓNG POPUP SHARE
+    if (currentPopup && !currentPopup.closed) {
+      currentPopup.close();
+    }
+    currentPopup = null;
+
+    // 🟥 2. DỪNG popupChecker nếu đang chạy
+    if (window.popupChecker) {
+      clearInterval(window.popupChecker);
+      window.popupChecker = null;
+    }
+
+    // 🟥 3. DỪNG giám sát screenshot + screenChange
+    if (screenCaptureInterval) clearInterval(screenCaptureInterval);
+    if (shareMonitorInterval) clearInterval(shareMonitorInterval);
+    if (window.screenChecker) clearInterval(window.screenChecker);
+
+    // 🟥 4. Ẩn khóa học
+    const panel = document.getElementById("bookPanel");
+    const viewer = document.getElementById("bookViewer");
+    if (panel) panel.style.display = "none";
+    if (viewer) viewer.innerHTML = "";
+    currentView = null;
+  }
+});
+// 🚫 Phát hiện F11 fullscreen (không dùng Fullscreen API)
+
+
+
+
+
+// Tính năng Treo Máy: Đóng tài liệu thay vì đăng xuất
+let inactivityTimer;
+const INACTIVITY_LIMIT = 60 * 60 * 1000; // Đặt 60 phút
+let throttleTimer = false;
+
+function startInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(idleLogout, INACTIVITY_LIMIT);
+}
+
+function handleActivity() {
+    if (!throttleTimer) {
+        startInactivityTimer();
+        throttleTimer = true;
+        setTimeout(() => throttleTimer = false, 3000); // cập nhật tối đa 3 giây/lần
+    }
+}
+
+// Các sự kiện tương tác trên tab
+["mousemove", "mousedown", "keydown", "scroll", "touchstart", "touchmove", "click"].forEach(evt => {
+    document.addEventListener(evt, handleActivity, { passive: true });
+});
+
+// Nhận diện khi người dùng xem pdf/video trong iframe
+window.addEventListener('blur', () => {
+    if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+        handleActivity();
+        if (!window.iframeActivityInterval) {
+            window.iframeActivityInterval = setInterval(() => {
+                if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+                    handleActivity();
+                } else {
+                    clearInterval(window.iframeActivityInterval);
+                    window.iframeActivityInterval = null;
+                }
+            }, 60000); // 1 phút check 1 lần nếu iframe vẫn đang được focus
+        }
+    }
+});
+
+window.addEventListener('focus', () => {
+    handleActivity();
+    if (window.iframeActivityInterval) {
+        clearInterval(window.iframeActivityInterval);
+        window.iframeActivityInterval = null;
+    }
+});
+
+// Khi tab thay đổi trạng thái - treo background vẫn tính là treo máy
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        handleActivity(); // Quay lại trang thì tính là có hoạt động
+    }
+});
+
+async function fetchUserIP() {
+    try {
+        const res = await fetch("https://api64.ipify.org?format=json");
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.ip) {
+                localStorage.setItem("user_ip_address", data.ip);
+            }
+        }
+    } catch (e) {
+        console.warn("Lỗi lấy IP:", e);
+    }
+}
+
+window.onload = () => {
+    // 🔥 Lấy IP người dùng để định danh bảo mật và răn đe
+    fetchUserIP();
+
+    // ⚡ Tải trước gộp toàn bộ dữ liệu (Batch prefetch)
+    preloadBatchData();
+
+    // 🛡️ Đảm bảo tất cả popup modern không hiện lúc load
+    const overlays = document.querySelectorAll('.modern-modal-overlay');
+    overlays.forEach(ov => ov.style.display = 'none');
+
+    renderRecentFiles();
+    renderFavoriteFiles();
+    startInactivityTimer();
+    
+    // 🔥 Preload pairing data for smoother UX
+    preloadPairingData();
+    
+    // Auto-load admin dashboards
+    loadAdminMonitorData(true);
+    loadAdminExamsData();
+    loadAdminHomeworkData();
+    loadAdminUsersData(true);
+};
+
+function idleLogout() {
+    const currentEmail = sessionStorage.getItem("userEmail");
+
+    if (currentEmail) {
+        // Tắt thi thử nếu có
+        if (typeof exitMockExamMode === 'function') {
+            exitMockExamMode(true);
+        }
+        
+        // Đóng video/tài liệu và về trang overview
+        if (typeof switchView === 'function') {
+            switchView('overview');
+        }
+        
+        showNotification("Hệ thống đã tự động đóng tài liệu do tài khoản tĩnh quá lâu 😊.", false, true);
+        
+        // Ghi log báo cáo treo máy
+        google.script.run.logIdleLogout(currentEmail);
+    }
+}
+// Hàm Đăng Xuất Sau 1 Tiếng
+
+
+function renderCourseList(courses) {
+  const courseList = document.getElementById("courseList");
+  if (!courseList) return;
+  courseList.innerHTML = "";
+  if (!courses || courses.length === 0) {
+    courseList.innerHTML = `
+      <div class="tds-central-state" style="padding: 40px 20px; text-align: center; color: #94a3b8;">
+        <div class="tds-state-icon" style="font-size: 3rem; margin-bottom: 12px;">📂</div>
+        <div class="tds-state-title" style="font-weight: 600; color: #64748b; font-size: 1.1rem; margin-bottom: 4px;">Chưa có khóa học nào</div>
+        <div class="tds-state-message" style="font-size: 0.9rem;">Danh sách khóa học hiện tại đang trống. Vui lòng quay lại sau!</div>
+      </div>
+    `;
+    return;
+  }
+  courses.sort((a, b) => a.title.localeCompare(b.title));
+  const root = {};
+  courses.forEach(course => {
+    const parts = (course.folder || 'Chưa phân loại').split(" / ");
+    let node = root;
+    parts.forEach((part, i) => {
+      if (!node[part]) node[part] = { __courses: [], __children: {} };
+      if (i === parts.length - 1) node[part].__courses.push(course);
+      node = node[part].__children;
+    });
+  });
+
+  const treeRoot = root;
+
+  const searchInput = document.getElementById("searchCourseInput");
+  const isSearching = searchInput && searchInput.value.trim() !== "";
+
+  function createFolderSection(name, data, level = 0, forceExpand = false, parentPath = "") {
+    const folderPath = parentPath ? `${parentPath} / ${name}` : name;
+    const isNodeActive = forceExpand || (window.expandedFolders && window.expandedFolders.has(folderPath)) || shouldExpandFolderNode(data, window.activeResourceFileId, 'course');
+    const section = document.createElement("div");
+    section.className = "exam-folder-section";
+      
+    const header = document.createElement("div");
+    header.className = `exam-folder-header level-${level}`;
+
+    header.innerHTML = `
+      <span class="title" title="${name}">📁 ${name}</span>
+      <span class="arrow">${isNodeActive ? "▼" : "▶"}</span>
+    `;
+      
+    const content = document.createElement("div");
+    content.className = "exam-folder-content";
+    content.style.display = isNodeActive ? "block" : "none";
+
+    header.addEventListener("click", () => {
+      const isHidden = content.style.display === "none";
+      content.style.display = isHidden ? "block" : "none";
+      header.querySelector(".arrow").textContent = isHidden ? "▼" : "▶";
+      if (isHidden) {
+        if (window.expandedFolders) window.expandedFolders.add(folderPath);
+      } else {
+        if (window.expandedFolders) window.expandedFolders.delete(folderPath);
+      }
+    });
+
+    data.__courses.forEach(course => {
+      const courseItem = document.createElement("div");
+      courseItem.className = "exam-item";
+
+      const icon =
+        course.type === "pdf" ? "📄" :
+        course.type === "sheet" ? "📊" :
+        course.type === "doc" ? "📝" :
+        "🎞️";
+
+      courseItem.innerHTML = `
+        <span class="exam-title" title="${course.title}">
+          ${icon} ${course.title}
+        </span>
+        <button class="exam-button"
+          onclick="readCourse('${course.fileId}', '${course.title}', '${course.type}', '${course.folder}')">
+          Xem
+        </button>
+      `;
+
+      content.appendChild(courseItem);
+    });
+
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], level + 1, forceExpand, folderPath);
+      content.appendChild(childSection);
+    });
+
+    section.appendChild(header);
+    section.appendChild(content);
+
+    return section;
+  }
+
+  const fragment = document.createDocumentFragment();
+  Object.keys(treeRoot).sort().forEach(folder => {
+    const data = treeRoot[folder];
+
+    // 1. Render all direct courses inside this level-0 folder
+    data.__courses.forEach(course => {
+      const courseItem = document.createElement("div");
+      courseItem.className = "exam-item";
+
+      const icon =
+        course.type === "pdf" ? "📄" :
+        course.type === "sheet" ? "📊" :
+        course.type === "doc" ? "📝" :
+        "🎞️";
+
+      courseItem.innerHTML = `
+        <span class="exam-title" title="${course.title}">
+          ${icon} ${course.title}
+        </span>
+        <button class="exam-button"
+          onclick="readCourse('${course.fileId}', '${course.title}', '${course.type}', '${course.folder}')">
+          Xem
+        </button>
+      `;
+      fragment.appendChild(courseItem);
+    });
+
+    // 2. Render children of this level-0 folder as folder sections (starting at UI level 0)
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], 0, isSearching, folder);
+      fragment.appendChild(childSection);
+    });
+  });
+  courseList.appendChild(fragment);
+}
+
+
+const webAppUrl = 'https://script.google.com/macros/s/AKfycby38CrLjN6CK4JKoTBy_fVo0cBgoXBMcJZgITKHtcTCbUqbgv5czK2v7_TNK1y6pZ0Wvw/exec';
+
+
+let openedFileIds = []; // file riêng của user
+let currentEmail = null;
+
+function revokeAccess() {
+  const email = currentEmail || sessionStorage.getItem("userEmail") || "";
+  if (!email || openedFileIds.length === 0) return;
+
+  const filesToRevoke = [...openedFileIds];
+  openedFileIds = []; // Reset array immediately to prevent duplicate requests
+
+  filesToRevoke.forEach(fileId => {
+    if (fileId && window.google && window.google.script && window.google.script.run && typeof window.google.script.run.revokeFileAccess === "function") {
+      window.google.script.run
+        .withSuccessHandler(function() {
+          console.log("✅ [Instant Revoke] Đã thu hồi quyền thành công cho file: " + fileId + " (" + email + ")");
+        })
+        .withFailureHandler(function(err) {
+          console.warn("⚠️ [Instant Revoke Warning] " + (err ? err.message : err));
+        })
+        .revokeFileAccess(fileId, email);
+    }
+  });
+
+  // Secondary fallback via sendBeacon for page unload/visibilitychange
+  if (navigator.sendBeacon && typeof webAppUrl !== 'undefined' && webAppUrl) {
+    try {
+      const data = {
+        action: "close",
+        userFiles: filesToRevoke,
+        email: email
+      };
+      navigator.sendBeacon(webAppUrl, JSON.stringify(data));
+    } catch (e) {}
+  }
+}
+
+// Event gọi revokeAccess
+window.addEventListener('beforeunload', () => {
+  if (typeof stopStudyTimer === 'function') stopStudyTimer();
+  revokeAccess();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (typeof stopStudyTimer === 'function') stopStudyTimer();
+    revokeAccess();
+  }
+});
+
+// LỚP 1 & LỚP 3: HỆ THỐNG BẢO MẬT CHỐNG CHỤP ẢNH & PHÁT TÁN TÀI LIỆU KHẢO THÍ
+
+// === LỚP 1: CHẶN THAO TÁC CƠ BẢN Ở FRONTEND ===
+
+// Biến trạng thái quản lý việc làm mờ chống chụp màn hình
+let isBlurActive = false;
+let blurCooldownActive = false;
+let blurTimer = null;
+let securityCountdownInterval = null;
+let overlayRemoveTimer = null;
+
+// Hàm làm mờ ĐỒNG BỘ và lập tức để đón đầu công cụ chụp màn hình (nhanh nhất có thể)
+function triggerImmediateBlur() {
+  if (document.body.classList.contains('show-watermarks')) {
+    // Áp dụng bộ lọc mờ trực tiếp lên các phần tử con để đạt tốc độ xử lý và độ ưu tiên tối đa mà không làm mờ overlay
+    Array.from(document.body.children).forEach(child => {
+      if (child.id !== 'securityBlurOverlay' && child.id !== 'securityLockoutOverlay') {
+        child.style.filter = 'blur(80px)';
+      }
+    });
+    showBlurOverlay(5000);
+    
+    // Defer clipboard write to prioritize rendering the security overlay instantly
+    setTimeout(() => {
+      try {
+        navigator.clipboard.writeText("⚠️ CẢNH BÁO BẢO MẬT: Nội dung này được bảo vệ bản quyền trí tuệ! Mọi hành vi chụp ảnh màn hình, sao chép hoặc phát tán trái phép đều bị nghiêm cấm.");
+      } catch (err) {}
+    }, 10);
+  }
+}
+
+// Hàm kiểm tra phím PrintScreen toàn diện trên mọi trình duyệt và hệ điều hành
+function isPrintScreenEvent(e) {
+  return e.key === 'PrintScreen' || 
+         e.key === 'Snapshot' || 
+         e.key === 'PrtScn' || 
+         e.key === 'PrtSc' || 
+         e.key === 'Prt' || 
+         e.keyCode === 44 || 
+         e.code === 'PrintScreen';
+}
+
+let lastPrtScLogTime = 0;
+function logPrtScPress() {
+  const now = Date.now();
+  if (now - lastPrtScLogTime < 1500) return; // Chặn spam nhiều sự kiện liên tiếp
+  lastPrtScLogTime = now;
+  
+  const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail");
+  if (email && document.body.classList.contains('show-watermarks')) {
+    google.script.run
+      .withSuccessHandler((res) => console.log("Ghi nhận PrtSc thành công:", res))
+      .withFailureHandler((err) => console.error("Lỗi ghi nhận PrtSc:", err))
+      .incrementPrtScCount(email);
+  }
+}
+
+let lockoutCountdownInterval = null;
+let lastScreenshotAttemptTime = 0;
+
+function checkSecurityLockout() {
+  const expiryStr = getCleanLocalStorage("screenshot_lock_expiry");
+  if (!expiryStr) {
+    hideSecurityLockout();
+    return;
+  }
+  
+  const expiry = parseInt(expiryStr, 10);
+  if (isNaN(expiry)) {
+    hideSecurityLockout();
+    return;
+  }
+  
+  const now = Date.now();
+  if (now >= expiry) {
+    localStorage.removeItem("screenshot_lock_expiry");
+    localStorage.removeItem("screenshot_attempts_count");
+    localStorage.removeItem("devtools_attempts_count");
+    hideSecurityLockout();
+  } else {
+    showSecurityLockout(expiry);
+  }
+}
+
+function showSecurityLockout(expiry) {
+  const overlay = document.getElementById("securityLockoutOverlay");
+  if (overlay) {
+    overlay.style.display = "flex";
+  }
+  document.body.style.overflow = "hidden";
+  
+  if (lockoutCountdownInterval) clearInterval(lockoutCountdownInterval);
+  
+  function updateCountdown() {
+    const remaining = Math.max(0, expiry - Date.now());
+    if (remaining <= 0) {
+      clearInterval(lockoutCountdownInterval);
+      lockoutCountdownInterval = null;
+      localStorage.removeItem("screenshot_lock_expiry");
+      localStorage.removeItem("screenshot_attempts_count");
+      localStorage.removeItem("devtools_attempts_count");
+      hideSecurityLockout();
+      showToast("🎉 Tài khoản của bạn đã được tự động mở khóa. Hãy tiếp tục học tập và tuân thủ quy chế nhé!", "success");
+    } else {
+      const hours = Math.floor(remaining / (60 * 60 * 1000));
+      const minutes = Math.floor((remaining % (60 * 60 * 1000)) / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      const cdText = document.getElementById("lockoutCountdownText");
+      if (cdText) {
+        if (hours > 0) {
+          cdText.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        } else {
+          cdText.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+      }
+    }
+  }
+  
+  updateCountdown();
+  lockoutCountdownInterval = setInterval(updateCountdown, 1000);
+}
+
+function hideSecurityLockout() {
+  const overlay = document.getElementById("securityLockoutOverlay");
+  if (overlay) {
+    overlay.style.display = "none";
+  }
+  document.body.style.overflow = "";
+  if (lockoutCountdownInterval) {
+    clearInterval(lockoutCountdownInterval);
+    lockoutCountdownInterval = null;
+  }
+}
+
+function applySecurityLock() {
+  const now = Date.now();
+  let violationLevel = parseInt(getCleanLocalStorage("screenshot_violation_level") || "0", 10);
+  let lastLockTime = parseInt(getCleanLocalStorage("screenshot_last_lock_time") || "0", 10);
+  
+  // Reset sau 3 ngày kể từ lần khóa cuối cùng
+  if (now - lastLockTime > 3 * 24 * 60 * 60 * 1000) {
+    violationLevel = 0;
+  }
+  
+  violationLevel++;
+  
+  const penaltyHours = [1, 3, 12, 24, 72]; // 1h, 3h, 12h, 24h, 72h
+  let lockHours = penaltyHours[violationLevel - 1] || penaltyHours[penaltyHours.length - 1];
+  
+  const lockExpiry = now + lockHours * 60 * 60 * 1000;
+  
+  localStorage.setItem("screenshot_violation_level", violationLevel.toString());
+  localStorage.setItem("screenshot_last_lock_time", now.toString());
+  localStorage.setItem("screenshot_lock_expiry", lockExpiry.toString());
+  
+  // Reset count cho lần khóa tiếp theo
+  localStorage.setItem("screenshot_attempts_count", "0");
+  localStorage.setItem("devtools_attempts_count", "0");
+  
+  hideBlurOverlay();
+  checkSecurityLockout();
+}
+
+function recordScreenshotAttempt() {
+  if (getCleanLocalStorage("screenshot_lock_expiry")) {
+    checkSecurityLockout();
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastScreenshotAttemptTime < 1500) return;
+  lastScreenshotAttemptTime = now;
+
+  let count = parseInt(getCleanLocalStorage("screenshot_attempts_count") || "0", 10);
+  count++;
+  localStorage.setItem("screenshot_attempts_count", count.toString());
+
+  if (count >= 3) {
+    applySecurityLock();
+  } else {
+    showToast(`⚠️ Cảnh báo bảo mật: Phát hiện hành vi cố gắng chụp màn hình! Bạn đã vi phạm ${count}/3 lần. Lần 3 sẽ khóa tài khoản (hình phạt cộng dồn)!`, "error");
+  }
+}
+
+let lastDevToolsAttemptTime = 0;
+
+function recordDevToolsAttempt() {
+  if (getCleanLocalStorage("screenshot_lock_expiry")) {
+    checkSecurityLockout();
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastDevToolsAttemptTime < 1500) return;
+  lastDevToolsAttemptTime = now;
+
+  let count = parseInt(getCleanLocalStorage("devtools_attempts_count") || "0", 10);
+  count++;
+  localStorage.setItem("devtools_attempts_count", count.toString());
+
+  const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail");
+  if (email) {
+    google.script.run
+      .withSuccessHandler((res) => console.log("Ghi nhận DevTools thành công:", res))
+      .withFailureHandler((err) => console.error("Lỗi ghi nhận DevTools:", err))
+      .incrementDevToolsCount(email);
+  }
+
+  if (count >= 2) {
+    applySecurityLock();
+  } else {
+    showBlurOverlay(5000, "Mở công cụ nhà phát triển (DevTools)", "SEC-DEV");
+    showToast(`⚠️ Cảnh báo bảo mật: Phát hiện hành vi cố gắng mở DevTools! Bạn đã vi phạm ${count}/2 lần. Lần 2 sẽ khóa tài khoản (hình phạt cộng dồn)!`, "error");
+  }
+}
+
+// 1. Chặn các phím tắt sao chép, lưu trang, in ấn, mở DevTools và làm mờ đón đầu (Preemptive Anti-Screenshot)
+function handleSecurityKeyDown(e) {
+  // Cho phép người dùng thao tác phím gõ, sao chép (Ctrl+C), cắt (Ctrl+X), dán (Ctrl+V), chọn tất cả (Ctrl+A), hoàn tác (Ctrl+Z)... khi đang ở trang Note hoặc ô nhập dữ liệu
+  if (e.target && e.target.closest && e.target.closest('[contenteditable="true"], input, textarea, .word-note-editor, .inserted-note-page-wrapper')) {
+    if (!isPrintScreenEvent(e) && e.key !== 'F12') {
+      return;
+    }
+  }
+
+  // Nếu đang bị khóa, chặn hoàn toàn
+  if (getCleanLocalStorage("screenshot_lock_expiry")) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+  
+  // CHẶN CHỤP ẢNH MÀN HÌNH CHỦ ĐỘNG (PREEMPTIVE ANTI-SCREENSHOT & BLUR)
+  if (isPrintScreenEvent(e)) {
+    if (document.body.classList.contains('show-watermarks')) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerImmediateBlur();
+      logPrtScPress();
+      recordScreenshotAttempt();
+      setTimeout(() => showToast("❌ Đã chặn hành động chụp ảnh màn hình để bảo vệ bản quyền!", "error"), 50);
+    }
+  }
+
+  // Đón đầu các tổ hợp phím hệ thống chụp màn hình ngay khi nhấn giữ Meta (Win/Cmd) + Shift hoặc Ctrl + Shift
+  // (Trước khi phím thứ 3 như S, 3, 4, 5 được nhấn để kích hoạt công cụ hệ thống)
+  const isMetaShiftCombo = 
+    (e.metaKey && e.shiftKey) || 
+    (e.key === 'Meta' && e.shiftKey) ||
+    (e.key === 'Shift' && e.metaKey) ||
+    (e.metaKey && (e.key === '3' || e.key === '4' || e.key === '5')) ||
+    (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's' || e.key === '4' || e.key === '3'));
+
+  if (isMetaShiftCombo) {
+    if (document.body.classList.contains('show-watermarks')) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerImmediateBlur();
+      recordScreenshotAttempt();
+    }
+  }
+
+  // Chặn F12 (Mở DevTools) -> Hiện cảnh báo và khóa tài khoản nếu lặp lại
+  if (e.key === 'F12') {
+    e.preventDefault();
+    e.stopPropagation();
+    recordDevToolsAttempt();
+    return;
+  }
+  
+  // Chặn Ctrl+Shift+I/J/C hoặc Cmd+Opt+I/J/C (DevTools) -> Hiện cảnh báo và khóa tài khoản nếu lặp lại
+  const isDevToolsCombo = (e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
+                          (isMac && e.altKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'));
+  if (isCmdOrCtrl && isDevToolsCombo) {
+    e.preventDefault();
+    e.stopPropagation();
+    recordDevToolsAttempt();
+    return;
+  }
+  
+  // Chặn Ctrl+U / Cmd+Opt+U (Xem nguồn trang)
+  const isViewSource = (e.key === 'U' || e.key === 'u') && (isMac ? (e.metaKey && e.altKey) : e.ctrlKey);
+  if (isViewSource) {
+    e.preventDefault();
+    e.stopPropagation();
+    showToast("⚠️ Tính năng xem nguồn trang đã bị chặn để bảo vệ bản quyền!", "error");
+    return;
+  }
+  
+  // Chặn Ctrl+S / Cmd+S (Lưu trang)
+  if (isCmdOrCtrl && (e.key === 'S' || e.key === 's')) {
+    e.preventDefault();
+    e.stopPropagation();
+    showToast("⚠️ Không cho phép tải hoặc lưu trữ trang web này!", "warning");
+    return;
+  }
+  
+  // Chặn Ctrl+P / Cmd+P (In trang)
+  if (isCmdOrCtrl && (e.key === 'P' || e.key === 'p')) {
+    e.preventDefault();
+    e.stopPropagation();
+    showToast("⚠️ Tính năng in ấn trang đã bị chặn để bảo vệ bản quyền!", "warning");
+    return;
+  }
+  
+  // Chặn sao chép & cắt (Ctrl+C / Ctrl+X) khi đang xem bài học/đề thi
+  if (isCmdOrCtrl && (e.key === 'C' || e.key === 'c' || e.key === 'X' || e.key === 'x')) {
+    if (document.body.classList.contains('show-watermarks')) {
+      e.preventDefault();
+      e.stopPropagation();
+      showToast("❌ Không được phép sao chép/cắt nội dung bài học hoặc đề thi!", "warning");
+    }
+  }
+}
+
+function handleSecurityKeyUp(e) {
+  if (getCleanLocalStorage("screenshot_lock_expiry")) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
+  if (isPrintScreenEvent(e)) {
+    if (document.body.classList.contains('show-watermarks')) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerImmediateBlur();
+      logPrtScPress();
+      recordScreenshotAttempt();
+    }
+  }
+}
+
+// Chặn phím cứng cáp ở pha capture khi đang bị khóa
+window.addEventListener('keydown', (e) => {
+  if (getCleanLocalStorage("screenshot_lock_expiry")) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+
+// Đăng ký ở pha CAPTURE (true) cho cả window và document để tối đa hóa khả năng bảo vệ, chống nhiễu
+window.addEventListener('keydown', handleSecurityKeyDown, true);
+document.addEventListener('keydown', handleSecurityKeyDown, true);
+window.addEventListener('keyup', handleSecurityKeyUp, true);
+document.addEventListener('keyup', handleSecurityKeyUp, true);
+
+// Thực hiện check trạng thái khóa ngay lập tức
+checkSecurityLockout();
+
+// 2. Chặn chuột phải (Context Menu) kèm thông báo chuyên nghiệp
+document.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  showToast("❌ Menu chuột phải bị chặn nhằm bảo vệ bản quyền tài liệu học tập!", "warning");
+});
+
+// 3. Chặn bôi đen bốc đầu văn bản và kéo thả phần tử (Ngoại trừ ô nhập và trang Note Word)
+document.addEventListener('selectstart', (e) => {
+  if (document.body.classList.contains('show-watermarks')) {
+    if (e.target && e.target.closest && e.target.closest('[contenteditable="true"], input, textarea, .word-note-editor, .inserted-note-page-wrapper')) {
+      return;
+    }
+    e.preventDefault();
+  }
+});
+document.addEventListener('dragstart', (e) => {
+  if (document.body.classList.contains('show-watermarks')) {
+    e.preventDefault();
+  }
+});
+
+
+// === LỚP 3: GIÁM SÁT NÂNG CAO (MUTATION OBSERVER) ===
+
+// 1. Ẩn mờ nội dung bài học/đề thi lập tức khi phát hiện hành động bảo mật
+function showBlurOverlay(lockDuration = 5000, behavior = "Chụp ảnh màn hình (Screenshot)", prefix = "SEC-SCR") {
+  isBlurActive = true;
+  blurCooldownActive = true; // Giữ true để không bị tắt bởi các tương tác chạm/click vô tình bên ngoài
+  
+  // Hủy tiến trình gỡ bỏ lớp phủ nếu có
+  if (overlayRemoveTimer) {
+    clearTimeout(overlayRemoveTimer);
+    overlayRemoveTimer = null;
+  }
+  
+  // Áp dụng bộ lọc mờ trực tiếp lên các phần tử con để đạt tốc độ và độ ưu tiên tối đa
+  Array.from(document.body.children).forEach(child => {
+    if (child.id !== 'securityBlurOverlay' && child.id !== 'securityLockoutOverlay') {
+      child.style.filter = 'blur(80px)';
+    }
+  });
+  document.body.classList.add('security-blurred');
+  
+  let overlay = document.getElementById("securityBlurOverlay");
+  if (overlay) {
+    overlay.style.transition = 'none';
+    overlay.style.cursor = 'default';
+    overlay.style.display = 'flex';
+    overlay.style.opacity = '1';
+  }
+  
+  // Cập nhật thông tin động "legit" vào bảng cảnh báo
+  const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail") || "Khách hàng";
+  const emailEl = document.getElementById("secEmailText");
+  if (emailEl) {
+    emailEl.textContent = email;
+  }
+
+  const behaviorEl = document.getElementById("secBehaviorText");
+  if (behaviorEl) {
+    behaviorEl.textContent = behavior;
+  }
+  
+  const timeEl = document.getElementById("secTimeText");
+  if (timeEl) {
+    const now = new Date();
+    const formattedTime = now.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }) + ' ' + now.toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    timeEl.textContent = formattedTime;
+  }
+  
+  const codeEl = document.getElementById("secCodeText");
+  if (codeEl) {
+    const randomCode = Math.floor(100000 + Math.random() * 900000);
+    codeEl.textContent = `${prefix}-${randomCode}`;
+  }
+
+  // Tự động vô hiệu hóa nút "Đã Hiểu" trong 2 giây nhẹ nhàng để tránh click nhầm tức thì,
+  // đồng thời đảm bảo hệ điều hành hoàn tất việc lưu ảnh mờ bảo mật.
+  const okBtn = document.getElementById("securityOkBtn");
+  if (okBtn) {
+    okBtn.disabled = true;
+    okBtn.style.opacity = "0.55";
+    okBtn.style.cursor = "not-allowed";
+    okBtn.style.background = "linear-gradient(135deg, #475569, #334155)"; // Màu xám đen lịch sự, nhẹ nhàng
+    let btnTimeLeft = 2;
+    okBtn.textContent = `Đã Hiểu (${btnTimeLeft}s)`;
+    
+    if (securityCountdownInterval) clearInterval(securityCountdownInterval);
+    securityCountdownInterval = setInterval(() => {
+      btnTimeLeft--;
+      if (okBtn) {
+        if (btnTimeLeft > 0) {
+          okBtn.textContent = `Đã Hiểu (${btnTimeLeft}s)`;
+        } else {
+          clearInterval(securityCountdownInterval);
+          securityCountdownInterval = null;
+          okBtn.disabled = false;
+          okBtn.style.opacity = "1";
+          okBtn.style.cursor = "pointer";
+          okBtn.style.background = "linear-gradient(135deg, #3b82f6, #2563eb)"; // Trả về màu xanh thân thiện
+          okBtn.textContent = "Đã Hiểu";
+        }
+      } else {
+        clearInterval(securityCountdownInterval);
+        securityCountdownInterval = null;
+      }
+    }, 1000);
+  }
+}
+
+function hideBlurOverlay() {
+  if (!isBlurActive) return;
+  isBlurActive = false;
+  blurCooldownActive = false;
+  
+  if (securityCountdownInterval) {
+    clearInterval(securityCountdownInterval);
+    securityCountdownInterval = null;
+  }
+  
+  const overlay = document.getElementById("securityBlurOverlay");
+  if (overlay) {
+    overlay.style.transition = "opacity 0.25s ease";
+    overlay.style.opacity = "0";
+    if (overlayRemoveTimer) clearTimeout(overlayRemoveTimer);
+    overlayRemoveTimer = setTimeout(() => {
+      overlay.style.display = "none";
+      overlayRemoveTimer = null;
+    }, 250);
+  }
+  
+  // Khôi phục độ rõ nét cho các phần tử con trực tiếp của body
+  Array.from(document.body.children).forEach(child => {
+    if (child.id !== 'securityBlurOverlay' && child.id !== 'securityLockoutOverlay') {
+      child.style.filter = '';
+    }
+  });
+  document.body.classList.remove('security-blurred');
+  removeInteractionListeners();
+  window.focus();
+}
+
+// Nút bấm "Đã Hiểu" chính xác mới ẩn lớp phủ
+function dismissSecurityOverlay() {
+  blurCooldownActive = false;
+  hideBlurOverlay();
+}
+window.dismissSecurityOverlay = dismissSecurityOverlay;
+
+// Chỉ đăng ký các sự kiện tương tác thực sự (click, touch, focus, keydown), không dùng mousemove
+function registerInteractionListeners() {
+  removeInteractionListeners(); // Tránh trùng lặp đăng ký sự kiện
+  window.addEventListener('focus', handleUserInteraction);
+  document.addEventListener('mousedown', handleUserInteraction);
+  document.addEventListener('keydown', handleUserInteraction);
+  document.addEventListener('touchstart', handleUserInteraction);
+}
+
+function removeInteractionListeners() {
+  window.removeEventListener('focus', handleUserInteraction);
+  document.removeEventListener('mousedown', handleUserInteraction);
+  document.removeEventListener('keydown', handleUserInteraction);
+  document.removeEventListener('touchstart', handleUserInteraction);
+}
+
+// Giải trừ lớp mờ khi người dùng quay lại tương tác chủ động và đã hết thời gian khóa cooldown
+function handleUserInteraction() {
+  if (isBlurActive && !blurCooldownActive) {
+    hideBlurOverlay();
+  }
+}
+
+// 2. Chống cố ý can thiệp gỡ bỏ Watermark / sửa đổi cấu trúc bảo mật thông qua MutationObserver
+function initWatermarkSecurity() {
+  const watermarkIds = ["emailWatermark1", "emailWatermark2", "emailWatermark3", "emailWatermark4"];
+  
+  const checkWatermarks = () => {
+    const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail") || "";
+    if (!email || !document.body.classList.contains('show-watermarks')) return;
+    
+    watermarkIds.forEach(id => {
+      let el = document.getElementById(id);
+      
+      // Nếu phần tử bị xóa khỏi DOM -> tạo lại ngay lập tức
+      if (!el) {
+        el = document.createElement("div");
+        el.id = id;
+        document.body.appendChild(el);
+        console.warn(`🛡️ Hệ thống bảo mật tự động khôi phục watermark bị xóa: ${id}`);
+      }
+      
+      // Đảm bảo nội dung luôn hiển thị email người dùng
+      if (el.textContent !== email) {
+        el.textContent = email;
+      }
+      
+      // Kiểm tra xem có bị chỉnh sửa thuộc tính ẩn/style để lách luật không
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || parseFloat(style.opacity) < 0.01 || style.visibility === 'hidden') {
+        el.style.setProperty('display', 'block', 'important');
+        el.style.setProperty('opacity', '1', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+        
+        showToast("⚠️ Phát hiện hành vi cố ý can thiệp hệ thống bảo mật!", "error");
+        setTimeout(() => {
+          revokeAccess();
+          logout();
+        }, 1500);
+      }
+    });
+  };
+
+  // Khởi động MutationObserver để giám sát thời gian thực
+  const observer = new MutationObserver((mutations) => {
+    let violated = false;
+    for (let mutation of mutations) {
+      if (mutation.type === 'childList') {
+        mutation.removedNodes.forEach(node => {
+          if (watermarkIds.includes(node.id) || node.id === "bookViewer" || node.id === "bookPanel") {
+            violated = true;
+          }
+        });
+      } else if (mutation.type === 'attributes') {
+        if (watermarkIds.includes(mutation.target.id) || mutation.target.id === "bookViewer" || mutation.target.id === "bookPanel") {
+          violated = true;
+        }
+      }
+    }
+    if (violated) {
+      checkWatermarks();
+    }
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style', 'class', 'hidden']
+  });
+
+  // Fallback kiểm tra định kỳ mỗi 3 giây phòng ngừa lỗi bẫy observer
+  setInterval(checkWatermarks, 3000);
+}
+
+// Chạy khởi tạo bảo mật khi DOM sẵn sàng
+document.addEventListener("DOMContentLoaded", () => {
+  initWatermarkSecurity();
+});
+
+let isLoading = false;
+
+function setButtonsDisabled(disabled) {
+  document.querySelectorAll(".exam-button").forEach(btn => {
+    btn.disabled = disabled;
+  });
+}
+
+
+async function readCourse(fileId, title, type, folderName = "", isMockExam = false, isStrictMockExam = false) {
+  if (typeof window.resetGlobalDocumentLoading === 'function') {
+    window.resetGlobalDocumentLoading();
+  }
+
+  // Kiểm tra quyền (chỉ STUDENT, S-STUDENT, O-STUDENT, ADMIN)
+  const role = (currentUserRole || "").toUpperCase().trim();
+  if (role !== "STUDENT" && role !== "S-STUDENT" && role !== "O-STUDENT" && role !== "ADMIN") {
+    guiYeuCauXetDuyet();
+    showToast("Vui lòng đăng ký khóa học để truy cập tính năng này.", "warning");
+    return;
+  }
+
+  if (isMobileOrTablet()) hideLeftPanel();
+
+  if (typeof isMockExamFile === 'function' && isMockExamFile(fileId, title, folderName, type)) {
+    isMockExam = true;
+  }
+  
+  if (!isMobileOrTablet() && currentUserRole !== 'ADMIN' && !window.screenShareNotRequired) {
+    if (!window.isScreenShareActive || (isMockExam && !window.currentShareHasCamera)) {
+      showToast("Đang kích hoạt chia sẻ màn hình...", "info");
+      try {
+        if (currentPopup && !currentPopup.closed) {
+          currentPopup.close();
+        }
+        await requestScreenShare(isMockExam);
+      } catch (err) {
+        showToast("⚠️ Yêu cầu chia sẻ toàn màn hình" + (isMockExam ? " và bật Camera" : "") + " để xem khóa học/đề thi.", "warning");
+        return;
+      }
+    }
+  }
+  
+  isLoading = true;
+  window.setGlobalDocumentLoading(true, 8000);
+
+  currentEmail = sessionStorage.getItem("userEmail");
+  if (!openedFileIds.includes(fileId)) {
+    openedFileIds.push(fileId);
+  }
+
+  const viewer = document.getElementById('bookViewer');
+  if (!viewer) {
+    console.error('Không tìm thấy phần tử #bookViewer');
+    isLoading = false;
+    window.resetGlobalDocumentLoading();
+    return;
+  }
+
+  if (!currentEmail) {
+    viewer.innerHTML = `
+      <div class="tds-central-state">
+        <div class="tds-state-icon">⚠️</div>
+        <div class="tds-state-message" style="color: #ef4444;">Bạn chưa đăng nhập hoặc chưa có email người dùng.</div>
+      </div>
+    `;
+    isLoading = false;
+    window.resetGlobalDocumentLoading();
+    return;
+  }
+
+  const isDirectPdf = isStrictMockExam || (type === 'pdf') || (type === 'doc') || (type === 'docx') || (type === 'document');
+
+  if (isDirectPdf) {
+    // Render standard layout immediately so that user gets strict mock exam loading UI instantly
+    renderReaderContent(viewer, fileId, title, isMockExam, true, isStrictMockExam, isDirectPdf);
+
+    // Call background share and log
+    google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        if (!openedFileIds.includes(fileId)) {
+          openedFileIds.push(fileId);
+        }
+        addRecentFile({
+          fileId: fileId,
+          title: title,
+          type: type,
+          category: isMockExam ? 'mockExam' : 'course',
+          folder: folderName,
+          timestamp: new Date().getTime()
+        });
+        renderRecentFiles();
+        
+        // Theo dõi tiến độ học tập khi vào xem chuyên đề
+        if (typeof trackLearning === 'function' && !isMockExam) {
+          trackLearning(folderName, fileId);
+        }
+        if (typeof startStudyTimer === 'function') {
+          startStudyTimer();
+        }
+      }
+      isLoading = false;
+      // Auto reset global document loading after short delay so PDF loader takes over smoothly
+      setTimeout(() => {
+        window.resetGlobalDocumentLoading();
+      }, 1500);
+    })
+    .withFailureHandler(function(error) {
+      console.warn("Lỗi kết nối share background:", error);
+      isLoading = false;
+      window.resetGlobalDocumentLoading();
+    })
+    .shareCourseFileToUserWithLog(fileId, currentEmail, isMockExam);
+
+  } else {
+    renderReaderLoading(viewer, `🎥 Đang mở ${isMockExam ? 'đề thi' : 'khóa học'} "${title}"...`);
+
+    google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.fakeError) {
+        setTimeout(() => {
+          renderReaderContent(viewer, "0000000000", title, isMockExam, true, isStrictMockExam, isDirectPdf);
+          isLoading = false;
+          window.resetGlobalDocumentLoading();
+        }, 10000);
+        return;
+      }
+      
+      if (res.success) {
+        renderReaderContent(viewer, fileId, title, isMockExam, true, isStrictMockExam, isDirectPdf);
+        
+        // ✅ Lưu vào danh sách để revokeAccess có thể quét
+        if (!openedFileIds.includes(fileId)) {
+          openedFileIds.push(fileId);
+        }
+
+        // ⏱️ Lưu vào lịch sử xem gần đây
+        addRecentFile({
+          fileId: fileId,
+          title: title,
+          type: type,
+          category: isMockExam ? 'mockExam' : 'course',
+          folder: folderName,
+          timestamp: new Date().getTime()
+        });
+        renderRecentFiles();
+
+        // Theo dõi tiến độ học tập khi vào xem chuyên đề
+        if (typeof trackLearning === 'function' && !isMockExam) {
+          trackLearning(folderName, fileId);
+        }
+        if (typeof startStudyTimer === 'function') {
+          startStudyTimer();
+        }
+
+      } else {
+        viewer.innerHTML = `
+          <div class="tds-central-state">
+            <div class="tds-state-icon">⚠️</div>
+            <div class="tds-state-message" style="color: #ef4444;">${res.message}</div>
+          </div>
+        `;
+      }
+
+      isLoading = false;
+      window.resetGlobalDocumentLoading();
+    })
+    .withFailureHandler(function(error) {
+      viewer.innerHTML = `
+        <div class="tds-central-state">
+          <div class="tds-state-icon">🌐</div>
+          <div class="tds-state-message" style="color: #ef4444;">Lỗi kết nối bộ phận lưu trữ</div>
+        </div>
+      `;
+      isLoading = false;
+      window.resetGlobalDocumentLoading();
+    })
+    .shareCourseFileToUserWithLog(fileId, currentEmail, isMockExam);
+  }
+}
+
+
+
+function openCourseFile(fileId) {
+    if (currentView !== 'courses') return;
+    
+    // Đợi allCourses có dữ liệu và màn hình đã được share (nếu PC)
+    let attempts = 0;
+    const checkInterval = setInterval(() => {
+        attempts++;
+        
+        const dataReady = allCourses && allCourses.length > 0;
+        const screenReady = isMobileOrTablet() || currentUserRole === 'ADMIN' || window.isScreenShareActive;
+
+        if (dataReady && screenReady) {
+            clearInterval(checkInterval);
+        } else if (attempts > 30) { // Tăng lên 15s cho thoải mái
+            clearInterval(checkInterval);
+        }
+    }, 500);
+}
+
+function filterCourses() {
+  const keyword = document.getElementById("searchCourseInput").value.toLowerCase().trim();
+  if (!keyword) {
+    renderCourseList(allCourses);
+    return;
+  }
+  const filtered = allCourses.filter(course =>
+    course.title.toLowerCase().includes(keyword)
+  );
+  renderCourseList(filtered);
+}
+
+function toggleTheme() {
+  document.body.classList.toggle("dark-mode");
+  const isDark = document.body.classList.contains("dark-mode");
+  localStorage.setItem("theme_preference", isDark ? "dark" : "light");
+  
+  if (typeof renderAdminSchedules === 'function' && typeof adminSchedulesData !== 'undefined') {
+    renderAdminSchedules(adminSchedulesData);
+  }
+  
+  if (typeof renderDailyTasks === 'function') {
+    renderDailyTasks();
+  }
+  
+  if (typeof renderMiniStudyDrawer === 'function') {
+    renderMiniStudyDrawer();
+  }
+  
+  if (typeof renderDashboardStudyPlan === 'function') {
+    renderDashboardStudyPlan();
+  }
+}
+
+// Restore theme from localStorage as soon as possible
+(function() {
+  const savedTheme = getCleanLocalStorage("theme_preference");
+  if (savedTheme === "dark") {
+    if (document.body) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.addEventListener("DOMContentLoaded", function() {
+        if (document.body) document.body.classList.add("dark-mode");
+      });
+    }
+  } else if (savedTheme === "light") {
+    if (document.body) {
+      document.body.classList.remove("dark-mode");
+    } else {
+      document.addEventListener("DOMContentLoaded", function() {
+        if (document.body) document.body.classList.remove("dark-mode");
+      });
+    }
+  }
+})();
+
+// ========================
+// Q&A System Logic
+// ========================
+function closeToolbox() {
+  const toolboxToggle = document.getElementById("toolboxToggle");
+  const toolboxPanel = document.getElementById("toolboxPanel");
+  if (toolboxPanel) toolboxPanel.classList.remove("show");
+  if (toolboxToggle) toolboxToggle.classList.remove("active");
+}
+
+function toggleQAPanel(fileId) {
+  const panel = document.getElementById("qaPanel");
+  if (!panel) return;
+  
+  const isActive = panel.classList.toggle("active");
+  
+  if (isActive && fileId) {
+    loadQAComments(fileId);
+  }
+}
+
+function loadQAComments(fileId) {
+  const qaList = document.getElementById("qaList");
+  if (!qaList) return;
+  
+  // Chỉ hiện loading nếu là lần đầu nạp file này hoặc danh sách đang trống
+  const currentFileId = qaList.getAttribute("data-file-id");
+  if (currentFileId !== fileId || !qaList.children.length || qaList.querySelector(".qa-empty")) {
+    qaList.innerHTML = '<div class="qa-loading">Đang tải bình luận...</div>';
+  }
+  
+  qaList.setAttribute("data-file-id", fileId);
+  
+  google.script.run.withSuccessHandler(function(comments) {
+    renderQAComments(comments);
+  }).getQAComments(fileId);
+}
+
+function renderQAComments(comments) {
+  const qaList = document.getElementById("qaList");
+  if (!qaList) return;
+  
+  if (!comments || comments.length === 0) {
+    qaList.innerHTML = '<div class="qa-empty">Chưa có bình luận nào. Hãy là người đầu tiên đặt câu hỏi!</div>';
+    return;
+  }
+  
+  // Phân tách gốc và phản hồi
+  const roots = comments.filter(c => !c.parentId);
+  const replies = comments.filter(c => c.parentId);
+  
+  const currentEmail = sessionStorage.getItem("userEmail") || "";
+  const currentUserRole = window.currentUserRole || "MEM"; // Try to check if we can get user role
+  const isAdmin = ["ADMIN", "VIP"].includes(currentUserRole.toUpperCase());
+  
+  const getRoleBadgeHTML = (role) => {
+    if (role === "ADMIN") return `<span class="qa-badge admin">🛡️ ADMIN</span>`;
+    if (role === "VIP") return `<span class="qa-badge vip">👑 VIP</span>`;
+    if (role === "S-STUDENT") return `<span class="qa-badge student" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: rgba(16, 185, 129, 0.3);">⭐ S-STU</span>`;
+    if (role === "O-STUDENT") return `<span class="qa-badge student">🧑‍🎓 O-STU</span>`;
+    if (role === "STUDENT") return `<span class="qa-badge student">🎓 STU</span>`;
+    return `<span class="qa-badge member">👤 MEM</span>`;
+  };
+  
+  let html = '';
+  
+  roots.forEach((comment, index) => {
+    const timeStr = new Date(comment.timestamp).toLocaleString('vi-VN');
+    const commentReplies = replies.filter(r => r.parentId == comment.id);
+    
+    let repliesHtml = '';
+    commentReplies.forEach(reply => {
+      const rTimeStr = new Date(reply.timestamp).toLocaleString('vi-VN');
+      const rReacts = reply.reacts || [];
+      const rHasReacted = currentEmail && rReacts.includes(currentEmail);
+      const rDeleteBtn = (isAdmin || (currentEmail && reply.userEmail === currentEmail)) ? 
+        `<button class="qa-delete-btn" onclick="confirmDeleteQA('${reply.id}', '${reply.fileId}')" title="Xóa"><svg style="width:14px;height:14px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
+        
+      repliesHtml += `
+        <div class="qa-comment-item reply" style="animation-delay: 0.1s">
+          <div class="qa-comment-body">
+            <div class="qa-comment-header">
+              <span class="qa-user-name" title="${reply.userName}">${reply.userName}</span>
+              ${getRoleBadgeHTML(reply.userRole)}
+            </div>
+            <div class="qa-content">${reply.content}</div>
+            <div class="qa-comment-footer">
+              <div class="qa-comment-actions" id="qa-actions-${reply.id}">
+                <button class="qa-react-btn ${rHasReacted ? 'active' : ''}" id="react-btn-${reply.id}" onclick="toggleQAReact('${reply.id}', '${reply.fileId}')" title="Đã đọc">
+                  <svg style="width:15px;height:15px;${rReacts.length > 0 ? 'margin-right:2px;' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                  ${rReacts.length > 0 ? `<span>${rReacts.length}</span>` : ''}
+                </button>
+                ${rDeleteBtn}
+              </div>
+              <div class="qa-timestamp-bottom">${rTimeStr}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    const cReacts = comment.reacts || [];
+    const cHasReacted = currentEmail && cReacts.includes(currentEmail);
+    const cDeleteBtn = (isAdmin || (currentEmail && comment.userEmail === currentEmail)) ? 
+      `<button class="qa-delete-btn" onclick="confirmDeleteQA('${comment.id}', '${comment.fileId}')" title="Xóa"><svg style="width:14px;height:14px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
+
+    html += `
+      <div class="qa-comment-item" id="comment-${comment.id}" style="animation-delay: ${index * 0.05}s">
+        <div class="qa-comment-body">
+          <div class="qa-comment-header">
+            <span class="qa-user-name" title="${comment.userName}">${comment.userName}</span>
+            ${getRoleBadgeHTML(comment.userRole)}
+          </div>
+          <div class="qa-content">${comment.content}</div>
+          <div class="qa-comment-footer">
+            <div class="qa-comment-actions" id="qa-actions-${comment.id}">
+              <button class="qa-reply-btn" onclick="showReplyForm('${comment.id}', '${comment.fileId}')" title="Phản hồi">
+                <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+              </button>
+              <button class="qa-react-btn ${cHasReacted ? 'active' : ''}" id="react-btn-${comment.id}" onclick="toggleQAReact('${comment.id}', '${comment.fileId}')" title="Đã đọc">
+                <svg style="width:15px;height:15px;${cReacts.length > 0 ? 'margin-right:2px;' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                ${cReacts.length > 0 ? `<span>${cReacts.length}</span>` : ''}
+              </button>
+              ${cDeleteBtn}
+            </div>
+            <div class="qa-timestamp-bottom">${timeStr}</div>
+          </div>
+          <div id="replies-${comment.id}" class="qa-replies-list" style="${commentReplies.length > 0 ? 'display: flex; flex-direction: column; gap: 12px; margin-top: 12px;' : 'display: none;'}">
+            ${repliesHtml}          
+          </div>
+          <div id="reply-form-container-${comment.id}"></div>
+        </div>
+      </div>
+    `;
+  });
+  
+  qaList.innerHTML = html;
+}
+
+function toggleQAReact(commentId, fileId) {
+  const btn = document.getElementById(`react-btn-${commentId}`);
+  if(btn) {
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
+  }
+  google.script.run.withSuccessHandler(function(res) {
+    if (res.success) {
+      loadQAComments(fileId);
+    } else {
+      showToast(res.message || "Lỗi khi react.", "error");
+      if(btn) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+      }
+    }
+  }).reactQAComment(commentId);
+}
+
+function confirmDeleteQA(commentId, fileId) {
+  const actionsDiv = document.getElementById(`qa-actions-${commentId}`);
+  if(!actionsDiv) return;
+  
+  if (!actionsDiv.dataset.original) {
+    actionsDiv.dataset.original = actionsDiv.innerHTML;
+  }
+  
+  actionsDiv.innerHTML = `
+    <span style="font-size: 11px; color: #ef4444; font-weight: 500;">Xóa?</span>
+    <button class="qa-react-btn" style="color: #ef4444; background: rgba(239, 68, 68, 0.1);" onclick="executeDeleteQA('${commentId}', '${fileId}')">Có</button>
+    <button class="qa-react-btn" style="background: rgba(148, 163, 184, 0.1);" onclick="cancelDeleteQA('${commentId}')">Không</button>
+  `;
+}
+
+function cancelDeleteQA(commentId) {
+  const actionsDiv = document.getElementById(`qa-actions-${commentId}`);
+  if(actionsDiv && actionsDiv.dataset.original) {
+    actionsDiv.innerHTML = actionsDiv.dataset.original;
+  }
+}
+
+function executeDeleteQA(commentId, fileId) {
+  const actionsDiv = document.getElementById(`qa-actions-${commentId}`);
+  if(actionsDiv) {
+    actionsDiv.innerHTML = `<span style="font-size: 11px; color: #94a3b8;">Đang xóa...</span>`;
+  }
+  google.script.run.withSuccessHandler(function(res) {
+    if (res.success) {
+       loadQAComments(fileId);
+    } else {
+       showToast(res.message || "Không thể xóa bình luận.", "error");
+       cancelDeleteQA(commentId);
+    }
+  }).deleteQAComment(commentId);
+}
+
+function showReplyForm(parentId, fileId) {
+  // Ẩn các form phản hồi khác nếu có
+  const existingForms = document.querySelectorAll(".qa-reply-form");
+  existingForms.forEach(f => f.remove());
+  
+  const container = document.getElementById(`reply-form-container-${parentId}`);
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="qa-reply-form">
+      <textarea id="replyInput-${parentId}" placeholder="Nhập phản hồi của bạn..."></textarea>
+      <div class="qa-reply-form-actions">
+        <button class="qa-btn-cancel" onclick="cancelReply('${parentId}')">Hủy</button>
+        <button id="sendReplyBtn-${parentId}" class="qa-btn-send" onclick="sendReply('${fileId}', '${parentId}')">Gửi phản hồi</button>
+      </div>
+    </div>
+  `;
+  
+  setTimeout(() => document.getElementById(`replyInput-${parentId}`).focus(), 100);
+}
+
+function cancelReply(parentId) {
+  const container = document.getElementById(`reply-form-container-${parentId}`);
+  if (container) container.innerHTML = '';
+}
+
+function sendReply(fileId, parentId) {
+  const input = document.getElementById(`replyInput-${parentId}`);
+  const content = input.value.trim();
+  const btn = document.getElementById(`sendReplyBtn-${parentId}`);
+  
+  if (!content) return;
+  
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-inline"></span> Đang gửi...`;
+  
+  google.script.run.withSuccessHandler(function(response) {
+    if (response) {
+      loadQAComments(fileId);
+    } else {
+      showToast("Lỗi khi gửi phản hồi. Vui lòng thử lại.", "error");
+      btn.disabled = false;
+      btn.innerText = "Gửi phản hồi";
+    }
+  }).saveQAComment(fileId, content, parentId);
+}
+
+function sendNewQA(fileId) {
+  const input = document.getElementById("qaInput");
+  const content = input.value.trim();
+  const btn = document.getElementById("sendQABtn");
+  
+  if (!content) return;
+  
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-inline"></span> Đang gửi...`;
+  
+  google.script.run.withSuccessHandler(function(response) {
+    if (response) {
+      input.value = "";
+      loadQAComments(fileId);
+    } else {
+      showToast("Lỗi khi gửi bình luận. Vui lòng thử lại.", "error");
+    }
+    btn.disabled = false;
+    btn.innerText = "Gửi bình luận";
+  }).saveQAComment(fileId, content);
+}
+
+function logout() {
+  // Hiển thị Overlay "Đang đăng xuất..."
+  if (!document.getElementById("logoutOverlay")) {
+    const overlay = document.createElement("div");
+    overlay.id = "logoutOverlay";
+    overlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255,255,255,0.9);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 9999; font-family: 'Poppins', sans-serif;
+      color: #333; transition: opacity 0.5s ease;
+    `;
+    overlay.innerHTML = `
+      <div class="spinner" style="
+        width: 40px; height: 40px;
+        border: 4px solid #ccc;
+        border-top: 4px solid #2196f3;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 16px;
+      "></div>
+      <div style="font-size: 18px;">Đang đăng xuất... Vui lòng chờ</div>
+      <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const content = document.getElementById("mainContent");
+  if (content) content.style.filter = "blur(3px)";
+
+  // Xóa session storage và local storage đệm phía trình duyệt
+  sessionStorage.clear();
+  window.isLoggedIn = false;
+  currentEmail = "";
+  window.screenShareNotRequired = false;
+  window.isScreenShareActive = false;
+  window.currentShareHasCamera = false;
+  currentAdIndex = 0;
+  if (typeof activePets !== 'undefined' && Array.isArray(activePets)) {
+    activePets.forEach(p => p.destroy());
+    activePets = [];
+  }
+  window.isAdminSystemAuthorized = false;
+  localStorage.removeItem("cached_userRole");
+  localStorage.removeItem("cached_userPoints");
+  localStorage.removeItem("cached_userRank");
+  localStorage.removeItem("cached_userStreak");
+  localStorage.removeItem("userEmail");
+  localStorage.removeItem("userName");
+  if (typeof renderRecentFiles === 'function') renderRecentFiles();
+  if (typeof renderFavoriteFiles === 'function') renderFavoriteFiles();
+
+  // Gọi server để xóa CacheService và chuyển sang view đăng nhập ngay tại chỗ
+  google.script.run
+    .withSuccessHandler(function () {
+      setTimeout(() => {
+        // Gỡ logout overlay và khôi phục blur
+        const overlay = document.getElementById("logoutOverlay");
+        if (overlay) overlay.remove();
+        if (content) content.style.filter = "none";
+        
+        // Chuyển sang giao diện đăng nhập SPA
+        const loginContainer = document.getElementById("loginPageContainer");
+        const dashboardWrapper = document.getElementById("dashboardWrapper");
+        if (loginContainer) loginContainer.style.display = "flex";
+        if (dashboardWrapper) dashboardWrapper.style.display = "none";
+        
+        // Xóa thông báo và dữ liệu form đăng nhập
+        const loginMsg = document.getElementById('loginMessage');
+        if (loginMsg) { loginMsg.textContent = ''; loginMsg.className = 'message'; }
+        
+        const loginEmail = document.getElementById('loginEmail');
+        if (loginEmail) loginEmail.value = '';
+        const loginPass = document.getElementById('loginPassword');
+        if (loginPass) loginPass.value = '';
+      }, 1000);
+    })
+    .logout();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  // 🔥 Tải dữ liệu đệm ngay lập tức để giao diện mượt hơn và giảm thiểu lỗi race condition
+  const cachedRole = getCleanLocalStorage("cached_userRole");
+  const cachedPoints = getCleanLocalStorage("cached_userPoints");
+  const cachedEmail = getCleanLocalStorage("userEmail");
+  const cachedName = getCleanLocalStorage("userName");
+
+  if (cachedEmail) {
+    safeSetSessionStorage("userEmail", cachedEmail);
+    document.body.setAttribute("data-user-email", cachedEmail);
+    if (typeof window.prefetchUserTrackingConfig === 'function') {
+      window.prefetchUserTrackingConfig(cachedEmail);
+    }
+  }
+  if (cachedName) {
+    safeSetSessionStorage("userName", cachedName);
+  }
+
+  if (cachedRole) {
+    currentUserRole = cachedRole;
+    updateVipBadgeUI(cachedRole);
+    if (typeof fetchStudentHomeworkStatus === 'function') {
+      fetchStudentHomeworkStatus();
+    }
+  }
+  
+  if (cachedPoints && !isNaN(Number(cachedPoints))) {
+      updatePointDisplay(cachedPoints);
+  }
+
+  // 🧱 Cài nội dung mặc định ngay lập tức để mượt mà hơn
+  switchView('overview');
+
+  // 🧪 Quản lý thanh tiến trình Loading thực tế
+  let currentLoadProgress = 0;
+  function setLoaderProgress(p) {
+    currentLoadProgress = p;
+    const bar = document.getElementById("loaderProgressFill");
+    if (bar) bar.style.width = p + "%";
+  }
+
+  let loaderInterval = null;
+  let isLoaderFinished = false;
+  let isAdPreloaded = false;
+  let isDataReady = false;
+
+  if (!cachedEmail) {
+    // Không có email đệm -> xem như chưa đăng nhập. Ẩn loader ngay lập tức, hiện trang login
+    isLoaderFinished = true;
+    isDataReady = true;
+    const mainLoader = document.getElementById("mainPageLoader");
+    if (mainLoader) {
+      mainLoader.style.display = "none";
+    }
+    const loginContainer = document.getElementById("loginPageContainer");
+    if (loginContainer) {
+      loginContainer.style.display = "flex";
+    }
+    const dashboardWrapper = document.getElementById("dashboardWrapper");
+    if (dashboardWrapper) {
+      dashboardWrapper.style.display = "none";
+    }
+  } else {
+    // Đã có email đệm -> Hiện loader và chạy tiến trình loading
+    setLoaderProgress(15);
+    loaderInterval = setInterval(() => {
+      if (currentLoadProgress < 85) {
+        setLoaderProgress(currentLoadProgress + Math.random() * 2);
+      }
+    }, 150);
+  }
+
+  window.restartLoaderProgress = function() {
+    isLoaderFinished = false;
+    isDataReady = false;
+    currentAdIndex = 0;
+    
+    // Re-preload the first ad to ensure it is ready when login completes
+    isAdPreloaded = false;
+    const firstAdImgUrl = (typeof ads !== "undefined" && ads && ads[0]) ? ads[0].img : "";
+    if (firstAdImgUrl) {
+      const imgPreload = new Image();
+      imgPreload.src = firstAdImgUrl;
+      imgPreload.onload = function() {
+        isAdPreloaded = true;
+        checkAndFinishLoader();
+      };
+      imgPreload.onerror = function() {
+        isAdPreloaded = true;
+        checkAndFinishLoader();
+      };
+      // Safety limit of 1.5 seconds
+      setTimeout(() => {
+        if (!isAdPreloaded) {
+          isAdPreloaded = true;
+          checkAndFinishLoader();
+        }
+      }, 1500);
+    } else {
+      isAdPreloaded = true;
+    }
+
+    setLoaderProgress(15);
+    if (loaderInterval) clearInterval(loaderInterval);
+    loaderInterval = setInterval(() => {
+      if (currentLoadProgress < 85) {
+        setLoaderProgress(currentLoadProgress + Math.random() * 2);
+      }
+    }, 150);
+  };
+
+  function finishLoader() {
+    if (isLoaderFinished) return;
+    isLoaderFinished = true;
+    if (loaderInterval) clearInterval(loaderInterval);
+    setLoaderProgress(100);
+    const loader = document.getElementById("mainPageLoader");
+    if (loader) {
+      setTimeout(() => {
+        loader.style.opacity = "0";
+        setTimeout(() => {
+          loader.style.display = "none";
+          // Trigger study plan reminders 1.5s after loader hides completely
+          if (typeof checkStudyReminders === "function") {
+            setTimeout(checkStudyReminders, 1500);
+          }
+        }, 500);
+      }, 300);
+    } else {
+      if (typeof checkStudyReminders === "function") {
+        setTimeout(checkStudyReminders, 1500);
+      }
+    }
+
+    // Hiển thị quảng cáo ngay khi ẩn loader (ảnh quảng cáo lúc này đã tải xong 100%)
+    if (typeof showAd === "function") {
+      if (ads && ads.length > 0) {
+        showAd(currentAdIndex);
+      } else {
+        if (window.google && google.script && google.script.run && typeof google.script.run.getBanners === "function") {
+          window._loginFinishTime = Date.now();
+          google.script.run
+            .withSuccessHandler(function(fetchedBanners) {
+              if (Array.isArray(fetchedBanners)) {
+                ads = fetchedBanners;
+                isBannersLoaded = true;
+                if (ads.length > 0) {
+                  // Chỉ hiển thị banner nếu dữ liệu tải về nhanh (dưới 4 giây),
+                  // tránh bật đè lên màn hình khi người dùng đã thao tác vào bài học
+                  const elapsed = Date.now() - (window._loginFinishTime || 0);
+                  if (elapsed < 4000) {
+                    showAd(0);
+                  }
+                }
+              }
+            })
+            .getBanners();
+        }
+      }
+    }
+    
+    // Khởi tạo các thành phần phụ khác chạy ngầm
+    if (typeof loadNote === "function") {
+      loadNote();
+    }
+    if (typeof loadUserClassSchedules === "function") {
+      loadUserClassSchedules();
+    }
+  }
+
+  function checkAndFinishLoader() {
+    if (isAdPreloaded && isDataReady) {
+      finishLoader();
+    }
+  }
+
+  // Tải ngầm trước (Preload) hình ảnh quảng cáo hôm nay
+  const firstAdImgUrl = (typeof ads !== "undefined" && ads && ads[currentAdIndex]) ? ads[currentAdIndex].img : "";
+  if (firstAdImgUrl) {
+    const imgPreload = new Image();
+    imgPreload.src = firstAdImgUrl;
+    imgPreload.onload = function() {
+      isAdPreloaded = true;
+      checkAndFinishLoader();
+    };
+    imgPreload.onerror = function() {
+      isAdPreloaded = true; // Bỏ qua nếu lỗi mạng/lỗi link quảng cáo
+      checkAndFinishLoader();
+    };
+    // Giới hạn thời gian chờ tải ảnh tối đa là 1.5 giây để tránh bị kẹt loading
+    setTimeout(() => {
+      if (!isAdPreloaded) {
+        isAdPreloaded = true;
+        checkAndFinishLoader();
+      }
+    }, 1500);
+  } else {
+    isAdPreloaded = true;
+  }
+
+  window.resetDashboardState = function() {
+    // 1. Clear media/iframes
+    document.querySelectorAll('video, audio').forEach(media => {
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+    });
+    ['pdfViewer', 'youtubeViewer', 'mockExamIframe', 'homeworkIframe', 'adminHomeworkIframe'].forEach(id => {
+        const iframe = document.getElementById(id);
+        if (iframe) iframe.src = "about:blank";
+    });
+
+    // 2. Clear lists & tables
+    ['examList', 'bookList', 'courseList', 'qaCommentsList', 'adminExamBody', 'adminUserBody', 'adminMonitorBody'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = "";
+    });
+
+    // 3. Clear inputs & searches
+    document.querySelectorAll('input[type="search"], input.search-box, input[placeholder*="Tìm kiếm"], textarea').forEach(input => input.value = "");
+    document.querySelectorAll('select.filter').forEach(select => select.selectedIndex = 0);
+
+    // 4. Close Modals & Overlays
+    document.querySelectorAll('.modal.show, .popup.show, .overlay.show, .transition-overlay.show').forEach(el => el.classList.remove('show'));
+    const inboxPopup = document.getElementById("inboxPopup");
+    if (inboxPopup) inboxPopup.style.display = 'none';
+
+    // 5. Close drawers/sidebars
+    const miniDrawer = document.getElementById("miniStudyDrawer");
+    if (miniDrawer) miniDrawer.classList.remove("active");
+
+    // 6. Clear Toast/Notifications
+    document.querySelectorAll('.toast, .notification, .toast-notification, .notice').forEach(t => t.remove());
+
+    // 7. Reset active file states & global arrays
+    window.activeResourceFileId = null;
+    window.currentEditingNoteId = null;
+    window.isExamMonitorActive = false;
+    window.allBooks = [];
+    window.allExams = [];
+    window.allCourses = [];
+    window.allMockExams = [];
+
+    // 8. Return to overview
+    if (typeof switchView === "function" && typeof currentView !== "undefined" && currentView !== 'overview') {
+        switchView('overview');
+    }
+  };
+
+  // 🔒 Kiểm tra login và tải dữ liệu kết hợp từ server (Bắt buộc tải xong dữ liệu thực tế trước khi tắt loader)
+  window.checkSessionAndLoadData = function (isFirstLoad = false) {
+    isDataReady = false;
+function terminateSessionImmediately(message, isBlocked) {
+  window.isLoggedIn = false;
+  currentEmail = "";
+  
+  if (typeof activePets !== 'undefined' && Array.isArray(activePets)) {
+    activePets.forEach(p => p.destroy());
+    activePets = [];
+  }
+  if (typeof loaderInterval !== 'undefined' && loaderInterval) {
+    clearInterval(loaderInterval);
+  }
+
+    // Xóa session storage và các dữ liệu liên quan đến phiên bản đăng nhập, giữ lại cài đặt cá nhân (pet, thông báo)
+  try {
+    sessionStorage.clear();
+    localStorage.removeItem("cached_userRole");
+    localStorage.removeItem("cached_userPoints");
+    localStorage.removeItem("cached_userRank");
+    localStorage.removeItem("cached_userStreak");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userName");
+    if (typeof TDSStorageCache !== 'undefined' && typeof TDSStorageCache.clearAll === 'function') {
+      TDSStorageCache.clearAll();
+    }
+  } catch (e) {
+    console.warn("Lỗi khi dọn dẹp cache:", e);
+  }
+
+  // Tắt mọi reader / overlay / video / modal đang mở
+  if (typeof closeReaderModal === 'function') closeReaderModal();
+  if (typeof removeVideoQrOverlay === 'function') removeVideoQrOverlay();
+  if (typeof dismissVideoFullscreenPrompt === 'function') dismissVideoFullscreenPrompt();
+  
+  document.body.classList.remove('video-active', 'reader-fullscreen');
+
+  const loginContainer = document.getElementById("loginPageContainer");
+  const dashboardWrapper = document.getElementById("dashboardWrapper");
+  const mainLoader = document.getElementById("mainPageLoader");
+  
+  if (loginContainer) loginContainer.style.display = "flex";
+  if (dashboardWrapper) dashboardWrapper.style.display = "none";
+  if (mainLoader) {
+    mainLoader.style.opacity = "0";
+    mainLoader.style.display = "none";
+  }
+
+  const loginMsg = document.getElementById('loginMessage');
+  if (loginMsg) {
+    loginMsg.textContent = message || (isBlocked ? 'Tài khoản của bạn đã bị khóa.' : 'Phiên làm việc đã kết thúc.');
+    loginMsg.className = 'message error';
+  }
+
+  if (message) {
+    alert("⚠️ BẢO MẬT: " + message);
+  }
+}
+window.terminateSessionImmediately = terminateSessionImmediately;
+
+let realtimeSessionCheckTimer = null;
+function initRealtimeSessionSecurityMonitor() {
+  if (realtimeSessionCheckTimer) clearInterval(realtimeSessionCheckTimer);
+
+  const checkLiveSession = () => {
+    if (!window.isLoggedIn) return;
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.loggedIn === false && res.forcedLogout) {
+            terminateSessionImmediately(res.message, res.isBlocked);
+          }
+        })
+        .withFailureHandler(function (err) {
+          console.warn("Kiểm tra phiên trực tiếp gặp lỗi:", err);
+        })
+        .checkLoginStatus();
+    }
+  };
+
+  // Kiểm tra đều đặn mỗi 45 giây
+  realtimeSessionCheckTimer = setInterval(checkLiveSession, 45000);
+
+  // Kiểm tra ngay khi người dùng chuyển lại tab này trên trình duyệt
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.isLoggedIn) {
+      checkLiveSession();
+    }
+  });
+  window.addEventListener('focus', () => {
+    if (window.isLoggedIn) {
+      checkLiveSession();
+    }
+  });
+}
+
+    google.script.run.withSuccessHandler(function (response) {
+      if (!response.loggedIn) {
+        terminateSessionImmediately(response.forcedLogout ? response.message : "", response.isBlocked);
+        return;
+      }
+
+      // 1. Xử lý thông tin người dùng cơ bản
+      const userEmail = response.email;
+      window.isLoggedIn = true;
+      
+      // 🧹 Dọn dẹp toàn bộ rác UI/biến toàn cục từ session trước để trang tinh tươm như mới
+      if (typeof window.resetDashboardState === 'function') {
+        window.resetDashboardState();
+      }
+
+      if (typeof initPet === 'function') {
+        initPet();
+      }
+      if (userEmail) {
+        currentEmail = userEmail;
+        safeSetSessionStorage("userEmail", userEmail);
+        safeSetSessionStorage("userName", response.displayName || "");
+        safeSetLocalStorage("userEmail", userEmail);
+        safeSetLocalStorage("userName", response.displayName || "");
+        document.body.setAttribute("data-user-email", userEmail);
+        if (typeof window.prefetchUserTrackingConfig === 'function') {
+          window.prefetchUserTrackingConfig(userEmail);
+        }
+        if (typeof renderRecentFiles === 'function') renderRecentFiles();
+        if (typeof renderFavoriteFiles === 'function') renderFavoriteFiles();
+
+        // Watermarks
+        ["emailWatermark1", "emailWatermark2", "emailWatermark3", "emailWatermark4"].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = userEmail;
+        });
+
+        // Avatar & Name
+        const userNameLabel = document.getElementById("userNameLabel");
+        const userAvatar = document.getElementById("userAvatar");
+        if (userNameLabel && userAvatar) {
+          let nameToDisplay = response.displayName || userEmail.split('@')[0];
+          userNameLabel.textContent = nameToDisplay;
+          
+          const savedAvatar = getCleanLocalStorage('user_custom_avatar');
+          let initials = nameToDisplay.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase();
+          if (initials.length > 2) initials = initials.substring(0, 2);
+          if (!initials) initials = nameToDisplay.charAt(0).toUpperCase();
+
+          if (savedAvatar) {
+            try {
+              const { icon, color } = JSON.parse(savedAvatar);
+              const isUrl = icon && (icon.startsWith('http') || icon.startsWith('data:image'));
+              if (isUrl) {
+                userAvatar.textContent = '';
+                userAvatar.style.backgroundImage = `url(${icon})`;
+                userAvatar.style.backgroundSize = 'cover';
+                userAvatar.style.backgroundPosition = 'center';
+                userAvatar.style.backgroundColor = 'transparent';
+              } else {
+                userAvatar.textContent = icon || initials;
+                userAvatar.style.background = `linear-gradient(135deg, ${color}, ${adjustColor(color, -20)})`;
+              }
+            } catch(e) { userAvatar.textContent = initials; }
+          } else {
+            userAvatar.textContent = initials;
+          }
+        }
+      }
+
+      // 2. Xử lý Điểm (Coins) & Event Coins
+      if (response.points !== undefined && response.points !== null) {
+        updatePointDisplay(response.points);
+        safeSetLocalStorage("cached_userPoints", response.points);
+      }
+
+      // 3. Xử lý Vai trò (Role)
+      if (response.role) {
+        const userRole = response.role.toUpperCase();
+        currentUserRole = userRole;
+        safeSetLocalStorage("cached_userRole", userRole);
+        updateVipBadgeUI(userRole);
+        if (typeof fetchStudentHomeworkStatus === 'function') {
+          fetchStudentHomeworkStatus();
+        }
+      }
+
+      // 4. Xử lý Rank
+      if (response.rank) {
+        const overviewRank = document.getElementById("overviewRank");
+        if (overviewRank) {
+          overviewRank.innerText = response.rank;
+          safeSetLocalStorage("cached_userRank", response.rank);
+        }
+      }
+
+      // 5. Thông báo (Inbox) - Tải sẵn dữ liệu nếu có
+      if (response.notifications) {
+        const readIds = (() => { try { return JSON.parse(getCleanLocalStorage('read_notif_ids') || "[]"); } catch(e) { return []; } })();
+        notifications = (response.notifications || []).map(n => ({
+          ...n,
+          read: readIds.includes(n.id)
+        }));
+        safeSetLocalStorage("cached_notifications", JSON.stringify(response.notifications));
+        updateBadgeCount();
+        renderNotifications();
+      } else {
+        loadNotificationsFromSheet();
+      }
+
+      if (response.streak !== undefined && response.streak !== null) {
+        const overviewStreak = document.getElementById("overviewStreak");
+        if (overviewStreak) {
+          overviewStreak.innerText = response.streak;
+          safeSetLocalStorage("cached_userStreak", response.streak);
+        }
+      }
+
+      // 6. Xử lý Thú cưng (Pets) - Tải sẵn dữ liệu sở hữu (Chỉ ghi đè nếu máy chủ gửi dữ liệu hợp lệ và không rỗng, tránh mất dữ liệu local)
+      if (response.ownedPets && Array.isArray(response.ownedPets) && response.ownedPets.length > 0) {
+         localStorage.setItem("owned_pets", JSON.stringify(response.ownedPets));
+      }
+
+      // 7. Rewards/Confetti
+      if (response.newRewards && response.newRewards.length > 0) {
+        setTimeout(() => {
+          shootConfetti();
+          response.newRewards.forEach(msg => showToastNotification("✨ " + msg));
+        }, 1000);
+      }
+
+      // 8. Đứt Streak & Cứu Streak
+      if (response.streakLostRescue) {
+        setTimeout(() => {
+          showStreakRescuePopup(response.streakLostRescue.oldStreak, response.streakLostRescue.rescueCost);
+        }, 1500);
+      }
+
+      // Toggle views to show the dashboard, hide login
+      const loginContainer = document.getElementById("loginPageContainer");
+      const dashboardWrapper = document.getElementById("dashboardWrapper");
+      if (loginContainer) loginContainer.style.display = "none";
+      if (dashboardWrapper) dashboardWrapper.style.display = "flex";
+
+      // Auto-load admin dashboards
+      loadAdminMonitorData(true);
+      loadAdminExamsData();
+      loadAdminHomeworkData();
+      loadAdminUsersData(true);
+
+      isDataReady = true;
+      checkAndFinishLoader();
+      
+      // Khởi chạy giám sát phiên làm việc thời gian thực (Heartbeat & Kick/Blocked detector)
+      if (typeof initRealtimeSessionSecurityMonitor === 'function') {
+        initRealtimeSessionSecurityMonitor();
+      }
+      
+      // Lazy-load Note editor if not already loaded (delayed to give priority to Main UI)
+      setTimeout(() => {
+         if (typeof quill === 'undefined') {
+            // Giao cho DOMContentLoaded khác xử lý nếu cần
+         }
+       }, 2000);
+
+      // 🔁 Ẩn bảng điều khiển toolbox mặc định
+      const toolboxToggle = document.getElementById("toolboxToggle");
+      const toolboxPanel = document.getElementById("toolboxPanel");
+      const fabContainer = document.querySelector(".fab-container");
+      if (toolboxToggle && toolboxPanel && fabContainer) {
+        makeElementDraggable(toolboxToggle, (moved) => {
+          if (!moved) {
+            toolboxPanel.classList.toggle("show");
+            toolboxToggle.classList.toggle("active");
+          }
+        }, fabContainer);
+      }
+
+    }).withFailureHandler((err) => {
+      console.error("Lỗi getInitialAppDataCombined:", err);
+      // 🏁 Ẩn màn hình chờ kể cả khi lỗi
+      finishLoader();
+    }).getInitialAppDataCombined();
+  };
+
+  // Run initial session check on load
+  window.checkSessionAndLoadData(true);
+});
+
+function toggleTranslateBox() {
+  const box = document.getElementById("translateBox");
+  const isVisible = box.style.display === "block";
+  box.style.display = isVisible ? "none" : "block";
+}
+
+function translateText() {
+  const input = document.getElementById("translateInput").value.trim();
+  const resultDiv = document.getElementById("translateResult");
+  if (!input) {
+    resultDiv.innerText = "Vui lòng nhập văn bản.";
+    return;
+  }
+  resultDiv.innerText = "⏳ Đang dịch...";
+  google.script.run.withSuccessHandler(function (translated) {
+    resultDiv.innerText = translated;
+  }).translateToVietnamese(input);
+}
+
+
+// Hộp Ghi Chú
+// Hộp Ghi Chú
+let quill;
+
+// mở/đóng note box
+function toggleNoteBox() {
+  const box = document.getElementById("noteBox");
+
+  if (box.style.display === "none" || box.style.display === "") {
+    box.style.display = "block";
+  } else {
+    box.style.display = "none";
+  }
+}
+
+// chạy khi DOM sẵn sàng (QUAN TRỌNG)
+document.addEventListener("DOMContentLoaded", () => {
+
+  // ===== QUILL =====
+  quill = new Quill('#editor', {
+    theme: 'snow',
+    placeholder: 'Nhập ghi chú của bạn...',
+    modules: {
+      toolbar: '#toolbar'
+    }
+  });
+
+  loadNote();
+
+  quill.on('text-change', function () {
+    saveNote();
+  });
+
+  // ===== LẤY ELEMENT =====
+  const noteBox = document.getElementById("noteBox");
+  const header = document.getElementById("noteHeader");
+
+  let isDragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  // ===== DRAG =====
+  if (header && noteBox) {
+    header.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      offsetX = e.clientX - noteBox.offsetLeft;
+      offsetY = e.clientY - noteBox.offsetTop;
+      
+      document.addEventListener("mousemove", handleNoteMouseMove);
+      document.addEventListener("mouseup", handleNoteMouseUp);
+    });
+  }
+
+  function handleNoteMouseMove(e) {
+    if (!isDragging) return;
+    noteBox.style.left = (e.clientX - offsetX) + "px";
+    noteBox.style.top = (e.clientY - offsetY) + "px";
+  }
+
+  function handleNoteMouseUp() {
+    if (isDragging) saveBoxState();
+    isDragging = false;
+    document.removeEventListener("mousemove", handleNoteMouseMove);
+    document.removeEventListener("mouseup", handleNoteMouseUp);
+  }
+
+  // ===== SAVE / LOAD BOX =====
+  function saveBoxState() {
+    localStorage.setItem("noteBoxState", JSON.stringify({
+      left: noteBox.style.left,
+      top: noteBox.style.top,
+      width: noteBox.style.width,
+      height: noteBox.style.height
+    }));
+  }
+
+  function loadBoxState() {
+    const saved = JSON.parse(getCleanLocalStorage("noteBoxState") || "null");
+    if (!saved) return;
+
+    if (saved.left) noteBox.style.left = saved.left;
+    if (saved.top) noteBox.style.top = saved.top;
+    if (saved.width) noteBox.style.width = saved.width;
+    if (saved.height) noteBox.style.height = saved.height;
+  }
+
+  // ===== RESIZE TRACK =====
+  const resizeObserver = new ResizeObserver(() => {
+    saveBoxState();
+  });
+
+  resizeObserver.observe(noteBox);
+
+  loadBoxState();
+});
+
+// ===== SAVE NOTE =====
+function saveNote() {
+  const content = quill.root.innerHTML;
+  localStorage.setItem("userNote", content);
+}
+
+// ===== LOAD NOTE =====
+function loadNote() {
+  const savedNote = getCleanLocalStorage("userNote");
+
+  if (savedNote && quill) {
+    quill.root.innerHTML = savedNote;
+  }
+}
+// Hộp Ghi Chú
+
+/* ================= INBOX NOTIFICATION LOGIC ================= */
+let notifications = (function() {
+  try {
+    const cached = getCleanLocalStorage("cached_notifications");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const readIds = (() => { try { return JSON.parse(getCleanLocalStorage('read_notif_ids') || "[]"); } catch(e) { return []; } })();
+      return parsed.map(n => ({ ...n, read: readIds.includes(n.id) }));
+    }
+  } catch(e) {}
+  return [];
+})();
+let inboxCurrentTab = 'all';
+
+// Ensure badge is updated if we have cached notifications
+setTimeout(updateBadgeCount, 100);
+
+function toggleInboxPopup() {
+  const modal = document.getElementById('inboxModal');
+  const isVisible = modal.style.display === 'flex';
+  modal.style.display = isVisible ? 'none' : 'flex';
+  
+  if (!isVisible) {
+    loadNotificationsFromSheet(); 
+  }
+}
+
+function switchInboxTab(tab) {
+  inboxCurrentTab = tab;
+  document.querySelectorAll('.inbox-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText.toLowerCase().includes(tab === 'all' ? 'tất cả' : 'chưa đọc'));
+  });
+  renderNotifications();
+}
+
+function renderNotifications() {
+  const list = document.getElementById('inboxList');
+  if (!list) return;
+
+  const filtered = inboxCurrentTab === 'all' 
+    ? notifications 
+    : notifications.filter(n => !n.read);
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="inbox-empty">
+        <div class="empty-icon">${inboxCurrentTab === 'all' ? '📭' : '✅'}</div>
+        <p>${inboxCurrentTab === 'all' ? 'Hòm thư đang trống. Hãy quay lại sau để nhận các thông báo mới từ hệ thống nhé!' : 'Thật tuyệt vời! Bạn đã đọc hết tất cả các thông báo mới rồi.'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Sắp xếp theo thời gian mới nhất
+  const sorted = [...filtered].sort((a, b) => new Date(b.time) - new Date(a.time));
+
+  list.innerHTML = sorted.map(n => `
+    <div class="notification-item ${n.read ? '' : 'unread'}" onclick="handleNotifClick('${n.id}')">
+      <div class="notif-title">${n.title}</div>
+      <div class="notif-desc">${n.desc}</div>
+      <div class="notif-time">${formatNotifTime(n.time)}</div>
+    </div>
+  `).join('');
+}
+
+function handleNotifClick(id) {
+  const notif = notifications.find(n => n.id === id);
+  if (notif && !notif.read) {
+    notif.read = true;
+    
+    // Lưu vào LocalStorage
+    const readIds = (() => { try { return JSON.parse(getCleanLocalStorage('read_notif_ids') || "[]"); } catch(e) { return []; } })();
+    if (!readIds.includes(id)) {
+      readIds.push(id);
+      localStorage.setItem('read_notif_ids', JSON.stringify(readIds));
+    }
+    
+    updateBadgeCount();
+    renderNotifications();
+  }
+  
+  if (!notif) return;
+
+  // Xử lý action mở trực tiếp bài giảng/tài liệu
+  const actionParts = notif.action.split(':');
+  const mainAction = actionParts[0];
+  let fileId = actionParts[1];
+
+  // Hỗ trợ định dạng cũ hoặc lồng nhau: courses:open:ID
+  if (mainAction === 'courses' && actionParts[1] === 'open' && actionParts[2]) {
+    fileId = actionParts[2];
+  }
+
+  let targetView = (mainAction === 'exam' || mainAction === 'exams') ? 'exams' : mainAction;
+  
+  // Nếu là tài liệu, thử mở trực tiếp
+  if (['books', 'exams', 'courses', 'mockExams'].includes(targetView)) {
+    if (fileId) {
+      openLibraryItemAcrossAll(targetView, fileId, true);
+    } else {
+      switchView(targetView);
+    }
+    toggleInboxPopup();
+  } else if (mainAction === 'overview') {
+    switchView('overview');
+    toggleInboxPopup();
+  } else {
+    toggleInboxPopup();
+  }
+}
+
+function openLibraryItemAcrossAll(initialType, fileId, openQA = false, btn = null) {
+  let actualBtn = null;
+  let originalBtnHtml = "";
+  if (btn) {
+    actualBtn = btn.querySelector('.purchased-item-btn') || btn;
+    originalBtnHtml = actualBtn.innerHTML;
+    
+    btn.style.pointerEvents = "none";
+    btn.style.opacity = "0.7";
+    actualBtn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;border-color:currentColor;margin:auto;"></div>`;
+  }
+
+  const resetBtn = () => {
+    if (btn) {
+      btn.style.pointerEvents = "";
+      btn.style.opacity = "";
+    }
+    if (actualBtn && originalBtnHtml) {
+      actualBtn.innerHTML = originalBtnHtml;
+    }
+  };
+
+  // Kiểm tra quyền truy cập vào phần khóa học / khảo thí (chỉ STUDENT, S-STUDENT, O-STUDENT, ADMIN)
+  if (initialType === "courses" || initialType === "mockExams") {
+    const role = (currentUserRole || "").toUpperCase().trim();
+    if (role !== "STUDENT" && role !== "S-STUDENT" && role !== "O-STUDENT" && role !== "ADMIN") {
+      resetBtn();
+      guiYeuCauXetDuyet();
+      showToast("Vui lòng đăng ký khóa học để truy cập tính năng này.", "warning");
+      return;
+    }
+  }
+
+  // Bước 1: Chuyển view ban đầu
+  switchView(initialType);
+  
+  let attempts = 0;
+  const maxAttempts = 60; // 30 giây
+  
+  const tid = String(fileId).trim();
+  
+  const checkInterval = setInterval(() => {
+    attempts++;
+    
+    // Thử tìm trong target hiện tại
+    let currentItems = [];
+    if (currentView === 'books') currentItems = allBooks;
+    else if (currentView === 'exams') currentItems = allExams;
+    else if (currentView === 'courses') currentItems = allCourses;
+    else if (currentView === 'mockExams') currentItems = allMockExams;
+    
+    let item = currentItems.find(i => String(i.fileId).trim() === tid);
+    
+    if (item) {
+      clearInterval(checkInterval);
+      resetBtn();
+      redirectToFile(currentView, item, openQA);
+      return;
+    }
+    
+    // Nếu sau 5 giây không thấy ở view hiện tại, thử tìm trong các mảng khác (nếu đã load)
+    if (attempts === 10) { 
+      const inBooks = allBooks.find(i => String(i.fileId).trim() === tid);
+      if (inBooks) {
+        clearInterval(checkInterval);
+        resetBtn();
+        switchView('books').then(() => redirectToFile('books', inBooks, openQA));
+        return;
+      }
+      
+      const inExams = allExams.find(i => String(i.fileId).trim() === tid);
+      if (inExams) {
+        clearInterval(checkInterval);
+        resetBtn();
+        switchView('exams').then(() => redirectToFile('exams', inExams, openQA));
+        return;
+      }
+      
+      const inCourses = allCourses.find(i => String(i.fileId).trim() === tid);
+      if (inCourses) {
+        clearInterval(checkInterval);
+        resetBtn();
+        switchView('courses').then(() => redirectToFile('courses', inCourses, openQA));
+        return;
+      }
+
+      const inMockExams = (typeof allMockExams !== 'undefined') ? allMockExams.find(i => String(i.fileId).trim() === tid) : null;
+      if (inMockExams) {
+        clearInterval(checkInterval);
+        resetBtn();
+        switchView('mockExams').then(() => redirectToFile('mockExams', inMockExams, openQA));
+        return;
+      }
+    }
+    
+    if (attempts >= maxAttempts) {
+      clearInterval(checkInterval);
+      resetBtn();
+      console.warn("Không tìm thấy tài liệu " + fileId + " sau khi quét toàn bộ danh sách.");
+    }
+  }, 500);
+}
+
+function redirectToFile(type, item, openQA) {
+  if (typeof isMockExamFile === 'function' && isMockExamFile(item.fileId, item.title, item.folder, type)) {
+    showToast("⚠️ Đề thi thử bắt buộc phải truy cập qua phòng Khảo thí.");
+    const p = switchView('mockExams');
+    if (p) p.then((success) => {
+      if (success !== false && currentView === 'mockExams') {
+        viewMockExam({ fileId: item.fileId, title: item.title, type: item.type || 'pdf' });
+      }
+    });
+    return;
+  }
+  if (type === 'books') readBook(item.fileId, item.title);
+  else if (type === 'exams') readExam(item.fileId, item.title);
+  else if (type === 'courses') readCourse(item.fileId, item.title, item.type || 'video', item.folder);
+  else if (type === 'mockExams') viewMockExam(item);
+  
+  if (openQA) {
+    setTimeout(() => {
+      if (typeof toggleQAPanel === 'function') {
+        const panel = document.getElementById("qaPanel");
+        if (panel && !panel.classList.contains("active")) {
+          toggleQAPanel(item.fileId);
+        } else if (panel) {
+          loadQAComments(item.fileId);
+        }
+      }
+    }, 3000);
+  }
+}
+
+function markAllNotificationsRead() {
+  const unreadNotifs = notifications.filter(n => !n.read);
+  if (unreadNotifs.length === 0) return;
+
+  const readIds = (() => { try { return JSON.parse(getCleanLocalStorage('read_notif_ids') || "[]"); } catch(e) { return []; } })();
+  
+  unreadNotifs.forEach(n => {
+    n.read = true;
+    if (!readIds.includes(n.id)) {
+      readIds.push(n.id);
+    }
+  });
+  
+  localStorage.setItem('read_notif_ids', JSON.stringify(readIds));
+  renderNotifications();
+  updateBadgeCount();
+}
+
+function updateBadgeCount() {
+  const badge = document.getElementById('inboxBadge');
+  if (!badge) return;
+  
+  const unreadCount = notifications.filter(n => !n.read).length;
+  if (unreadCount > 0) {
+    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function formatNotifTime(timeStr) {
+  const date = new Date(timeStr);
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000); // seconds
+
+  if (diff < 60) return 'Vừa xong';
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function loadNotificationsFromSheet() {
+  google.script.run.withSuccessHandler(function(data) {
+    const readIds = (() => { try { return JSON.parse(getCleanLocalStorage('read_notif_ids') || "[]"); } catch(e) { return []; } })();
+    
+    // Kiểm tra xem có thông báo mới không để hiện thông báo nổi (toast)
+    const oldUnreadCount = notifications.filter(n => !n.read).length;
+
+    notifications = (data || []).map(n => ({
+      ...n,
+      read: readIds.includes(n.id)
+    }));
+    
+    localStorage.setItem("cached_notifications", JSON.stringify(data || []));
+    
+    const newUnreadCount = notifications.filter(n => !n.read).length;
+    
+    // Nếu có thêm thông báo chưa đọc mới, và không phải lần đầu tải (notifications cũ không rỗng)
+    if (newUnreadCount > oldUnreadCount && oldUnreadCount >= 0 && notifications.length > 0) {
+      showToastNotification("Bạn có thông báo mới! 🔔");
+    }
+
+    updateBadgeCount();
+    renderNotifications();
+  }).getSystemNotifications();
+}
+
+function showToastNotification(message) {
+  const oldToast = document.querySelector(".tds-toast");
+  if (oldToast) oldToast.remove();
+
+  const toast = document.createElement("div");
+  toast.className = "tds-toast";
+  toast.style.pointerEvents = "auto"; // Cho phép click vào nút Xem
+  
+  toast.innerHTML = `
+    <div class="tds-toast-icon">🔔</div>
+    <div style="display: flex; align-items: center; gap: 12px; min-width: 200px;">
+      <span style="flex: 1;">${message}</span>
+      <button onclick="toggleInboxPopup(); this.closest('.tds-toast').remove()" class="toast-action-btn">
+        Xem
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.classList.add("show"), 10);
+  
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.classList.remove("show");
+      setTimeout(() => toast.remove(), 400);
+    }
+  }, 8000);
+}
+
+// Khởi tạo
+window.addEventListener('DOMContentLoaded', () => {
+    prefetchStoreItems();
+    setInterval(loadNotificationsFromSheet, 120000); // Refresh mỗi 2 phút
+});
+
+function hideIframeLoader() {
+  const indicator = document.getElementById("iframeLoadingIndicator");
+  if (indicator) {
+    indicator.style.display = "none";
+  }
+}
+
+function transitionUpgradeView(fromViewId, toViewId, isWideTarget) {
+  const fromEl = document.getElementById(fromViewId);
+  const toEl = document.getElementById(toViewId);
+  const box = document.getElementById("approvalModalBox");
+  
+  if (!fromEl || !toEl) return;
+  
+  // Ngăn click trùng lặp trong thời gian chuyển cảnh
+  fromEl.style.pointerEvents = "none";
+  toEl.style.pointerEvents = "none";
+  
+  // Bước 1: Fade out mượt mà khung hình cũ
+  fromEl.style.transition = "opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1)";
+  fromEl.style.opacity = "0";
+  fromEl.style.transform = "scale(0.96) translateY(-8px)";
+  
+  setTimeout(() => {
+    fromEl.style.display = "none";
+    
+    // Bước 2: Thay đổi kích thước chiều rộng modal cha mượt mà
+    if (box) {
+      if (isWideTarget) {
+        box.classList.add("wide-modal");
+      } else {
+        box.classList.remove("wide-modal");
+      }
+    }
+    
+    // Bước 3: Đặt khung hình mới ở trạng thái ẩn sẵn sàng
+    toEl.style.display = "block";
+    toEl.style.opacity = "0";
+    toEl.style.transform = "scale(0.96) translateY(8px)";
+    toEl.style.transition = "none";
+    
+    // Buộc browser tính toán lại layout
+    void toEl.offsetHeight;
+    
+    // Bước 4: Fade in mượt mà khung hình mới
+    toEl.style.transition = "opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
+    toEl.style.opacity = "1";
+    toEl.style.transform = "scale(1) translateY(0)";
+    
+    // Kích hoạt lại click
+    setTimeout(() => {
+      toEl.style.pointerEvents = "auto";
+    }, 250);
+  }, 150);
+}
+
+function showStudentFormEmbedded() {
+  const iframe = document.getElementById("googleFormIframe");
+  const indicator = document.getElementById("iframeLoadingIndicator");
+  if (iframe) {
+    if (indicator) indicator.style.display = "flex";
+    iframe.src = "https://forms.gle/CJ1ac2586ZQ3xKwB6";
+  }
+  transitionUpgradeView("upgradeChoicesView", "upgradeStudentEmbeddedView", false);
+}
+
+function showVipForm() {
+  transitionUpgradeView("upgradeChoicesView", "upgradeVipFormView", false);
+  document.getElementById("approvalReason").value = "support";
+  document.getElementById("approvalResult").innerHTML = "";
+  document.getElementById("supportEmail").value = "";
+  document.getElementById("fbLink").value = "";
+  document.getElementById("otherReason").value = "";
+  handleReasonChange();
+}
+
+function showSStudentForm() {
+  const role = (window.currentUserRole || currentUserRole || "").toUpperCase().trim();
+  if (role !== "STUDENT") {
+    showToast("❌ Chỉ tài khoản Học Viên (STUDENT) mới có thể yêu cầu nâng cấp lên S-STUDENT!", "error");
+    return;
+  }
+  transitionUpgradeView("upgradeChoicesView", "upgradeSStudentFormView", false);
+  document.getElementById("sstudentApprovalResult").innerHTML = "";
+  document.getElementById("sstudentFbName").value = "";
+  document.getElementById("sstudentFbLink").value = "";
+}
+
+function showSStudentsListModal() {
+  const modal = document.getElementById("sstudentsListModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  loadSStudentsList();
+}
+
+function closeSStudentsListModal() {
+  const modal = document.getElementById("sstudentsListModal");
+  if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+function loadSStudentsList() {
+  const container = document.getElementById("sstudentsListContainer");
+  if (!container) return;
+  
+  // Show spinner
+  container.innerHTML = `
+    <div style="text-align: center; padding: 35px 0;">
+      <div class="spinner" style="margin: 0 auto; border-color: #10b981; border-top-color: transparent;"></div>
+      <p style="font-size: 12.5px; color: #64748b; margin-top: 10px;">Đang kết nối Server tải danh sách...</p>
+    </div>
+  `;
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        renderSStudentsList(res.data);
+      } else {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 25px; color: #ef4444; font-size: 13px;">
+            ⚠️ Lỗi tải danh sách: ${res ? res.message : "Không có phản hồi"}
+          </div>
+        `;
+      }
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 25px; color: #ef4444; font-size: 13px;">
+          ⚠️ Không thể kết nối với máy chủ: ${err.toString()}
+        </div>
+      `;
+    })
+    .getSStudentsList();
+}
+
+function renderSStudentsList(list) {
+  const container = document.getElementById("sstudentsListContainer");
+  if (!container) return;
+  
+  if (!list || list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 30px; color: #64748b; font-size: 13px;">
+        📭 Hiện tại chưa có học sinh nào đạt danh hiệu S-STUDENT.
+      </div>
+    `;
+    return;
+  }
+  
+  let html = "";
+  list.forEach((item, index) => {
+    const rank = index + 1;
+    let rankClass = "sstud-rank-other";
+    let rankText = rank;
+    
+    if (rank === 1) { rankClass = "sstud-rank-1"; rankText = "🥇"; }
+    else if (rank === 2) { rankClass = "sstud-rank-2"; rankText = "🥈"; }
+    else if (rank === 3) { rankClass = "sstud-rank-3"; rankText = "🥉"; }
+    
+    html += `
+      <div class="sstud-item-card">
+        <div style="display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;">
+          <div class="sstud-item-rank ${rankClass}">${rankText}</div>
+          <div style="min-width: 0; flex: 1;">
+            <div class="sstud-item-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;" title="${item.name}">${item.name}</div>
+            <div class="sstud-item-email" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;" title="${item.email}">${item.email}</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 12px; flex-shrink: 0;">
+          <div class="sstud-item-coins">
+            <span>🪙</span>
+            <span>${(item.points || 0).toLocaleString()}</span>
+          </div>
+          <div class="sstud-item-active" style="font-size: 10px;">Hoạt động: ${item.lastActive || "N/A"}</div>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+
+function showUpgradeChoices() {
+  let currentActiveId = "upgradeChoicesView";
+  if (document.getElementById("upgradeStudentEmbeddedView").style.display === "block") {
+    currentActiveId = "upgradeStudentEmbeddedView";
+  } else if (document.getElementById("upgradeVipFormView").style.display === "block") {
+    currentActiveId = "upgradeVipFormView";
+  } else if (document.getElementById("upgradeSStudentFormView").style.display === "block") {
+    currentActiveId = "upgradeSStudentFormView";
+  }
+  
+  if (currentActiveId !== "upgradeChoicesView") {
+    transitionUpgradeView(currentActiveId, "upgradeChoicesView", false);
+  }
+}
+
+function guiYeuCauXetDuyet() {
+  const choices = document.getElementById("upgradeChoicesView");
+  const student = document.getElementById("upgradeStudentEmbeddedView");
+  const vip = document.getElementById("upgradeVipFormView");
+  const sstudent = document.getElementById("upgradeSStudentFormView");
+  const box = document.getElementById("approvalModalBox");
+  
+  if (choices && student && vip && sstudent && box) {
+    choices.style.display = "block";
+    choices.style.opacity = "1";
+    choices.style.transform = "none";
+    choices.style.transition = "none";
+    choices.style.pointerEvents = "auto";
+    
+    student.style.display = "none";
+    vip.style.display = "none";
+    sstudent.style.display = "none";
+  }
+  
+  document.getElementById("approvalModal").style.display = "flex";
+}
+
+function closeApprovalModal() {
+  document.getElementById("approvalModal").style.display = "none";
+  const iframe = document.getElementById("googleFormIframe");
+  if (iframe) {
+    iframe.style.transition = "none";
+    iframe.src = "";
+  }
+}
+
+/* ================= ACCOUNT MODAL LOGIC ================= */
+function openAccountModal() {
+  const modal = document.getElementById('accountModal');
+  const nameLabel = document.getElementById('userNameLabel');
+  
+  // Fill details
+  document.getElementById('accountModalName').textContent = nameLabel ? nameLabel.textContent : 'Người dùng';
+  
+  // Example email
+  const userEmail = sessionStorage.getItem("userEmail") || 'dangta2606@gmail.com';
+  document.getElementById('accountModalEmail').textContent = userEmail; 
+  
+  // Determine Role Badge from #vipBadge
+  const badgeContainer = document.getElementById('accountBadgeContainer');
+  const vipBadge = document.getElementById('vipBadge');
+  if (badgeContainer && vipBadge) {
+    const text = vipBadge.textContent || '';
+    let badgeHTML = '';
+    
+    if (text.includes('VIP')) {
+      badgeHTML = `<span class="badge-item vip">👑 VIP PREMIUM</span>`;
+    } else if (text.includes('ADMIN')) {
+      badgeHTML = `<span class="badge-item admin">🛡️ ADMIN</span>`;
+    } else if (text.includes('S-STUDENT') || text.includes('S-STU')) {
+      badgeHTML = `<span class="badge-item student" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: rgba(16, 185, 129, 0.3);">⭐ S-STU</span>`;
+    } else if (text.includes('O-STUDENT') || text.includes('O-STU')) {
+      badgeHTML = `<span class="badge-item student">🧑‍🎓 O-STU</span>`;
+    } else if (text.includes('STUDENT') || text.includes('STU')) {
+      badgeHTML = `<span class="badge-item student">🎓 STU</span>`;
+    } else {
+      badgeHTML = `<span class="badge-item member">👤 Member</span>`;
+    }
+    badgeContainer.innerHTML = badgeHTML;
+  }
+
+  // Clean up any ongoing relief timer first
+  if (window.reliefTimer) {
+    clearInterval(window.reliefTimer);
+    window.reliefTimer = null;
+  }
+
+  // Refresh Coins from server to ensure accuracy in modal
+  if (userEmail) {
+    google.script.run.withSuccessHandler(function(points) {
+      updatePointDisplay(points);
+    }).getUserPoints(userEmail);
+  }
+
+  const streakLabel = document.getElementById('modalStreakDays');
+  if (streakLabel) {
+    streakLabel.textContent = updateUserStreak();
+  }
+  
+  // Sync avatar large
+  const mainAvatar = document.getElementById('userAvatar');
+  const largeAvatar = document.getElementById('accountAvatarLarge');
+  if (mainAvatar && largeAvatar) {
+    largeAvatar.textContent = mainAvatar.textContent;
+    largeAvatar.style.background = window.getComputedStyle(mainAvatar).background;
+    largeAvatar.style.backgroundImage = window.getComputedStyle(mainAvatar).backgroundImage;
+    largeAvatar.style.backgroundSize = window.getComputedStyle(mainAvatar).backgroundSize;
+    largeAvatar.style.backgroundPosition = window.getComputedStyle(mainAvatar).backgroundPosition;
+    
+    // Highlight selected option in grid
+    document.querySelectorAll('.avatar-option').forEach(opt => {
+        if (opt.textContent === mainAvatar.textContent && mainAvatar.textContent !== '') {
+            opt.classList.add('selected');
+        } else {
+            opt.classList.remove('selected');
+        }
+    });
+  }
+
+  modal.style.display = 'flex';
+}
+
+/* ================= LOCALSTORAGE-BASED STUDENT RELIEF ENGINE ================= */
+function checkStudentReliefEligibility(points) {
+  const cachedRole = getCleanLocalStorage("cached_userRole");
+  if (cachedRole !== "STUDENT" && cachedRole !== "S-STUDENT") return false;
+
+  const claimThreshold = 100;
+  if (points >= claimThreshold) return false;
+
+  const userEmail = getCleanSessionStorage("userEmail") || '';
+  const claimKey = "student_relief_claim_time_" + userEmail.replace(/[^a-zA-Z0-9]/g, "_");
+  const lastClaimStr = getCleanLocalStorage(claimKey);
+  const now = new Date().getTime();
+  const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+
+  if (lastClaimStr) {
+    const lastClaim = Number(lastClaimStr);
+    if (now - lastClaim < cooldownMs) {
+      return false; // Still in cooldown
+    }
+  }
+
+  return true;
+}
+
+function triggerStudentReliefIfEligible() {
+  if (typeof checkStudentReliefEligibility === "function" && checkStudentReliefEligibility(currentUserPoints)) {
+    setTimeout(() => {
+      openStudentReliefAskModal();
+    }, 500);
+    return true;
+  }
+  return false;
+}
+
+function openStudentReliefAskModal() {
+  const modal = document.getElementById("studentReliefAskModal");
+  if (modal) {
+    modal.style.display = "flex";
+  }
+}
+
+function closeStudentReliefAskModal() {
+  const modal = document.getElementById("studentReliefAskModal");
+  if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+function acceptStudentReliefFromPrompt() {
+  closeStudentReliefAskModal();
+  triggerClaimRelief();
+}
+
+function refreshStudentReliefUI(points) {
+  const reliefSec = document.getElementById("studentReliefSection");
+  if (!reliefSec) return;
+
+  const cachedRole = getCleanLocalStorage("cached_userRole");
+  const isEligibleRole = (cachedRole === "STUDENT" || cachedRole === "S-STUDENT");
+
+  if (!isEligibleRole) {
+    reliefSec.style.display = "none";
+    return;
+  }
+
+  reliefSec.style.display = "block";
+
+  const statusText = document.getElementById("reliefStatusText");
+  const claimBtn = document.getElementById("claimReliefBtn");
+  const userEmail = sessionStorage.getItem("userEmail") || '';
+  const claimKey = "student_relief_claim_time_" + userEmail.replace(/[^a-zA-Z0-9]/g, "_");
+  const lastClaimStr = getCleanLocalStorage(claimKey);
+  const now = new Date().getTime();
+  const cooldownMs = 7 * 24 * 60 * 60 * 1000; // 7 days (1 week) as requested
+  let remainingMs = 0;
+
+  if (lastClaimStr) {
+    const lastClaim = Number(lastClaimStr);
+    const timePassed = now - lastClaim;
+    if (timePassed < cooldownMs) {
+      remainingMs = cooldownMs - timePassed;
+    }
+  }
+
+  const claimThreshold = 100; // < 100 coins as requested
+  const claimAmount = 1000;  // 1000 coins per claim as requested
+
+  if (points >= claimThreshold) {
+    if (statusText) {
+      statusText.innerHTML = "Trợ cấp cứu trợ khả dụng khi số dư ví ít hơn <b>" + claimThreshold + " 🪙</b>.<br>Ví của bạn đang có <b>" + points + " 🪙</b>.";
+    }
+    if (claimBtn) {
+      claimBtn.disabled = true;
+      claimBtn.innerHTML = "<span>🔒</span> Số dư ví vẫn ổn định";
+    }
+  } else if (remainingMs > 0) {
+    if (claimBtn) claimBtn.disabled = true;
+
+    let remainingSeconds = Math.floor(remainingMs / 1000);
+    if (window.reliefTimer) {
+      clearInterval(window.reliefTimer);
+      window.reliefTimer = null;
+    }
+
+    function updateCooldownText() {
+      if (remainingSeconds <= 0) {
+        if (window.reliefTimer) {
+          clearInterval(window.reliefTimer);
+          window.reliefTimer = null;
+        }
+        refreshStudentReliefUI(points);
+        return;
+      }
+      const days = Math.floor(remainingSeconds / (24 * 3600));
+      const hours = Math.floor((remainingSeconds % (24 * 3600)) / 3600);
+      const minutes = Math.floor((remainingSeconds % 3600) / 60);
+      const seconds = remainingSeconds % 60;
+      
+      let durationStr = "";
+      if (days > 0) durationStr += days + " ngày ";
+      durationStr += hours + " giờ " + minutes + " phút " + seconds + " giây";
+
+      if (statusText) {
+        statusText.innerHTML = "Tuần này bạn đã nhận 1000 🪙 trợ cấp sinh viên.<br>Quay lại sau: <b style='font-size:12px; color:#ef4444;'>⏳ " + durationStr + "</b>";
+      }
+      if (claimBtn) {
+        claimBtn.innerHTML = "<span>⏳</span> Giới hạn: 1 lần / tuần";
+      }
+      remainingSeconds--;
+    }
+
+    updateCooldownText();
+    window.reliefTimer = setInterval(function() {
+      const m = document.getElementById('leaderboardPopup');
+      if (!m || m.style.display === 'none') {
+        clearInterval(window.reliefTimer);
+        window.reliefTimer = null;
+        return;
+      }
+      updateCooldownText();
+    }, 1000);
+  } else {
+    if (statusText) {
+      statusText.innerHTML = "Ví của bạn dưới 100 🪙! Bạn đủ điều kiện cấp trợ cấp khẩn cấp.<br>👉 Quà trợ cấp: <b>+" + claimAmount + " 🪙 Triple D Coin</b>.";
+    }
+    if (claimBtn) {
+      claimBtn.disabled = false;
+      claimBtn.innerHTML = "<span>❤️</span> Nhận 1000 Coin Trợ Cấp";
+    }
+  }
+}
+
+function closeAccountModal() {
+  if (window.reliefTimer) {
+    clearInterval(window.reliefTimer);
+    window.reliefTimer = null;
+  }
+  document.getElementById('accountModal').style.display = 'none';
+}
+
+function openProfileEditModal() {
+  closeAccountModal();
+  document.getElementById('profileEditModal').style.display = 'flex';
+  
+  // Fill current name
+  const currentName = sessionStorage.getItem("userName");
+  if (currentName) {
+    document.getElementById('editProfileName').value = currentName;
+  }
+}
+
+function closeProfileEditModal() {
+  document.getElementById('profileEditModal').style.display = 'none';
+  
+  // Clear edit profile fields except name which is prefilled when opened
+  document.getElementById('editProfileName').value = '';
+  document.getElementById('editProfileCurrentPassword').value = '';
+  document.getElementById('editProfileNewPassword').value = '';
+}
+
+function submitProfileUpdate() {
+  const newName = document.getElementById('editProfileName').value.trim();
+  const currentPassword = document.getElementById('editProfileCurrentPassword').value.trim();
+  const newPassword = document.getElementById('editProfileNewPassword').value.trim();
+  
+  if (!newName && !newPassword) {
+    showNotification("Bạn chưa điền thông tin thay đổi.", "error");
+    return;
+  }
+  
+  if (newPassword && !currentPassword) {
+    showNotification("Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu mới.", "error");
+    return;
+  }
+  
+  const btn = document.getElementById('submitProfileUpdateBtn');
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="passcode-spinner"></span> Đang lưu...';
+  btn.disabled = true;
+  
+  const userEmail = sessionStorage.getItem("userEmail");
+  
+  const formData = {
+    newName: newName,
+    currentPassword: currentPassword,
+    newPassword: newPassword
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(response) {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+      if (response && response.success) {
+        showNotification(response.message, "success");
+        if (newName) {
+          sessionStorage.setItem("userName", newName);
+          document.getElementById('userNameLabel').textContent = newName;
+          document.getElementById('accountModalName').textContent = newName;
+          // Refresh avatar text if no custom avatar
+          const savedAvatar = getCleanLocalStorage('user_custom_avatar');
+          if (!savedAvatar) {
+            const tempAvatarText = newName.substring(0, 2).toUpperCase();
+            document.getElementById('userAvatar').innerHTML = tempAvatarText;
+            document.getElementById('accountAvatarLarge').innerHTML = tempAvatarText;
+          }
+        }
+        // clear fields
+        closeProfileEditModal();
+      } else {
+        showNotification(response ? response.message : "Có lỗi xảy ra.", "error");
+      }
+    })
+    .withFailureHandler(function(error) {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+      showNotification("Lỗi kết nối: " + error, "error");
+    })
+    .updateUserProfile(userEmail, formData);
+}
+
+function triggerClaimRelief() {
+  const claimBtn = document.getElementById("claimReliefBtn");
+  const statusText = document.getElementById("reliefStatusText");
+  const userEmail = sessionStorage.getItem("userEmail") || '';
+  
+  if (claimBtn) {
+    claimBtn.disabled = true;
+    claimBtn.innerHTML = "<span>⏳</span> Đang cấp 1000 Coin...";
+  }
+
+  let originalReliefPoints = currentUserPoints;
+  let optimisticallyAddedRelief = false;
+  if (typeof currentUserPoints !== 'undefined' && typeof updatePointDisplay === 'function') {
+      updatePointDisplay(currentUserPoints + 1000);
+      optimisticallyAddedRelief = true;
+  }
+  
+  google.script.run.withSuccessHandler(function(response) {
+    if (response && response.success) {
+      showToast(response.message, "success");
+      
+      // Save claim timestamp in browser localStorage
+      const claimKey = "student_relief_claim_time_" + userEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      const now = new Date().getTime();
+      localStorage.setItem(claimKey, String(now));
+      
+      // Update points values everywhere
+      if (typeof updatePointDisplay === "function") {
+        updatePointDisplay(response.newPoints);
+      }
+      const modalBalance = document.getElementById("modalCoinBalance");
+      if (modalBalance) {
+        modalBalance.textContent = Number(response.newPoints).toLocaleString();
+      }
+      
+      // Refresh status dynamically
+      loadLeaderboard();
+    } else {
+      if (optimisticallyAddedRelief && typeof updatePointDisplay === 'function') {
+        updatePointDisplay(originalReliefPoints); // Revert
+      }
+      showToast(response.message || "Không thể thực hiện nhận trợ cấp.", "error");
+      loadLeaderboard();
+    }
+  }).withFailureHandler(function(error) {
+      if (optimisticallyAddedRelief && typeof updatePointDisplay === 'function') {
+        updatePointDisplay(originalReliefPoints); // Revert
+      }
+      if (claimBtn) {
+          claimBtn.disabled = false;
+          claimBtn.innerHTML = "💰 Nhận 1000 Coin";
+      }
+      showToast("Lỗi kết nối", "error");
+  }).claimStudentCoinReliefClient();
+}
+
+function selectAvatar(icon, color, element) {
+  const mainAvatar = document.getElementById('userAvatar');
+  const largeAvatar = document.getElementById('accountAvatarLarge');
+  const isUrl = icon.startsWith('http') || icon.startsWith('data:image');
+  
+  const updateEl = (el) => {
+    if (!el) return;
+    if (isUrl) {
+      el.textContent = '';
+      el.style.backgroundImage = `url(${icon})`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+      el.style.backgroundColor = 'transparent';
+      el.style.border = '2px solid white';
+    } else {
+      el.textContent = icon;
+      el.style.backgroundImage = 'none';
+      el.style.backgroundColor = color;
+      el.style.background = `linear-gradient(135deg, ${color}, ${adjustColor(color, -20)})`;
+    }
+  };
+
+  updateEl(mainAvatar);
+  updateEl(largeAvatar);
+  
+  // Update selected state in grid
+  document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
+  if (element) {
+    element.classList.add('selected');
+  } else {
+    // Try to find if icon matches any option (for initial load)
+    document.querySelectorAll('.avatar-option').forEach(opt => {
+        if (opt.textContent === icon && !isUrl) opt.classList.add('selected');
+    });
+  }
+  
+  // Save to localStorage
+  localStorage.setItem('user_custom_avatar', JSON.stringify({ icon, color, isUrl }));
+}
+
+function toggleCustomAvatarPopup() {
+  const popup = document.getElementById("customAvatarPopup");
+  const content = document.getElementById("customAvatarContent");
+  if (popup.style.display === "none") {
+    popup.style.display = "flex";
+    setTimeout(() => {
+      popup.style.opacity = "1";
+      if (content) content.style.transform = "translateY(0)";
+    }, 10);
+  } else {
+    popup.style.opacity = "0";
+    if (content) content.style.transform = "translateY(20px)";
+    setTimeout(() => {
+      popup.style.display = "none";
+      document.getElementById("customAvatarUrlInput").value = "";
+      document.getElementById("customAvatarFileInput").value = "";
+      const label = document.getElementById("fileLabel");
+      if (label) label.textContent = "Bấm để tải ảnh lên";
+    }, 300);
+  }
+}
+
+function applyCustomAvatar() {
+  const urlInput = document.getElementById("customAvatarUrlInput").value.trim();
+  const fileInput = document.getElementById("customAvatarFileInput");
+  
+  if (urlInput) {
+    selectAvatar(urlInput, '#ffffff', null);
+    toggleCustomAvatarPopup();
+    showToast('Đã cập nhật avatar từ URL!', 'success');
+  } else if (fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const imgData = e.target.result;
+      if (imgData.length > 1024 * 1024) { // 1MB limit for localStorage
+        showToast('Ảnh quá lớn! Vui lòng chọn ảnh dưới 1MB.', 'error');
+        return;
+      }
+      selectAvatar(imgData, '#ffffff', null);
+      toggleCustomAvatarPopup();
+      showToast('Đã cập nhật avatar của bạn!', 'success');
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    showToast('Vui lòng nhập URL hoặc chọn tệp!', 'info');
+  }
+}
+
+function adjustColor(col, amt) {
+  let usePound = false;
+  if (col[0] == "#") {
+    col = col.slice(1);
+    usePound = true;
+  }
+  let num = parseInt(col, 16);
+  let r = (num >> 16) + amt;
+  if (r > 255) r = 255;
+  else if (r < 0) r = 0;
+  let b = ((num >> 8) & 0x00FF) + amt;
+  if (b > 255) b = 255;
+  else if (b < 0) b = 0;
+  let g = (num & 0x0000FF) + amt;
+  if (g > 255) g = 255;
+  else if (g < 0) g = 0;
+  return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16).padStart(6, '0');
+}
+
+function updateUserStreak() {
+  const cached = getCleanLocalStorage("cached_userStreak");
+  if (cached !== null) {
+    return parseInt(cached) || 1;
+  }
+  return 1;
+}
+
+let pendingStreakRescue = null;
+
+function showStreakRescuePopup(oldStreak, rescueCost) {
+  pendingStreakRescue = { oldStreak, rescueCost };
+  const modal = document.getElementById("streakRescueModal");
+  const lostStreakDays = document.getElementById("lostStreakDays");
+  const streakRescueCost = document.getElementById("streakRescueCost");
+  
+  if (modal && lostStreakDays && streakRescueCost) {
+    lostStreakDays.textContent = oldStreak;
+    streakRescueCost.textContent = rescueCost;
+    
+    modal.style.display = "flex";
+    setTimeout(() => {
+      modal.style.opacity = "1";
+      const box = modal.querySelector(".streak-rescue-box");
+      if (box) box.style.transform = "scale(1) translateY(0)";
+    }, 50);
+  }
+}
+
+function closeStreakRescueModal() {
+  const modal = document.getElementById("streakRescueModal");
+  if (modal) {
+    modal.style.opacity = "0";
+    const box = modal.querySelector(".streak-rescue-box");
+    if (box) box.style.transform = "scale(0.9) translateY(20px)";
+    setTimeout(() => {
+      modal.style.display = "none";
+    }, 300);
+  }
+  
+  // Inform the server so it removes the script property and doesn't prompt again
+  google.script.run.dismissStreakRescue(getUserEmail());
+}
+
+function confirmRescueStreak() {
+  if (!pendingStreakRescue) return;
+  const cost = pendingStreakRescue.rescueCost;
+  
+  if (currentUserPoints < cost) {
+    showToast(`Bạn không đủ Coin để cứu Streak (Cần: ${cost} 🪙, bạn có: ${currentUserPoints} 🪙)`, "error");
+    return;
+  }
+  
+  showGlobalSpinner("Đang cứu Streak...");
+  google.script.run.withSuccessHandler((res) => {
+    hideGlobalSpinner();
+    if (res && res.success) {
+      updatePointDisplay(res.newPoints);
+      
+      // Update streak in Overview and cache
+      const overviewStreak = document.getElementById("overviewStreak");
+      if (overviewStreak) {
+        overviewStreak.innerText = res.newStreak;
+      }
+      safeSetLocalStorage("cached_userStreak", res.newStreak);
+      
+      shootConfetti();
+      showToast(res.message, "success");
+      
+      // Close the modal cleanly
+      const modal = document.getElementById("streakRescueModal");
+      if (modal) {
+        modal.style.opacity = "0";
+        const box = modal.querySelector(".streak-rescue-box");
+        if (box) box.style.transform = "scale(0.9) translateY(20px)";
+        setTimeout(() => {
+          modal.style.display = "none";
+        }, 300);
+      }
+    } else {
+      showToast(res ? res.message : "Cứu Streak thất bại!", "error");
+    }
+  }).withFailureHandler((err) => {
+    hideGlobalSpinner();
+    showToast("Lỗi kết nối khi cứu Streak: " + err, "error");
+  }).rescueUserStreak(getUserEmail());
+}
+
+// Initial avatar load
+document.addEventListener('DOMContentLoaded', () => {
+  // Update streak on every visit
+  updateUserStreak();
+
+  const savedAvatar = getCleanLocalStorage('user_custom_avatar');
+  if (savedAvatar) {
+    try {
+      const { icon, color } = JSON.parse(savedAvatar);
+      // Call selectAvatar to handle both image URL and emoji icons consistently
+      selectAvatar(icon, color, null);
+    } catch (e) {
+      console.error("Error loading avatar", e);
+    }
+  }
+});
+
+/* ================= ACCOUNT MODAL LOGIC END ================= */
+
+function submitVipApprovalRequest() {
+  const reason = document.getElementById("approvalReason").value;
+  const fbLink = document.getElementById("fbLink").value.trim();
+  const supportEmail = document.getElementById("supportEmail").value.trim();
+  const otherReason = document.getElementById("otherReason").value.trim();
+
+  const resultBox = document.getElementById("approvalResult");
+  const submitBtn = document.getElementById("approvalSubmitBtn");
+
+  if (reason === "support" && !supportEmail) {
+    resultBox.innerHTML = `<div style="color: #c62828; padding: 10px; background: #ffebee; border-radius: 8px;">❌ Vui lòng nhập Email bạn đã dùng gửi tài liệu!</div>`;
+    return;
+  }
+  if (reason === "fan" && !fbLink) {
+    resultBox.innerHTML = `<div style="color: #c62828; padding: 10px; background: #ffebee; border-radius: 8px;">❌ Vui lòng nhập Link Facebook của bạn!</div>`;
+    return;
+  }
+
+  // Disable button
+  submitBtn.disabled = true;
+  submitBtn.innerText = "⏳ Đang gửi...";
+  resultBox.innerHTML = "";
+
+  google.script.run.withSuccessHandler(function (res) {
+    const icon = res.success ? "✅" : "❌";
+    const bgColor = res.success ? "#f1f8e9" : "#ffebee";
+    const borderColor = res.success ? "#a5d6a7" : "#ef9a9a";
+    const textColor = res.success ? "#2e7d32" : "#c62828";
+
+    const [firstLine, ...rest] = res.message.split("\n");
+    const secondLine = rest.join("\n").trim();
+
+    resultBox.innerHTML = `
+      <div style="
+        background: ${bgColor};
+        border-left: 6px solid ${borderColor};
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-size: 14px;
+        animation: fadeIn 0.3s ease;
+        color: ${textColor};
+      ">
+        <div style="margin-bottom: 4px;">${icon} ${firstLine}</div>
+        ${secondLine ? `<div style="color: ${res.success ? '#2e7d32' : '#c62828'};">${secondLine}</div>` : ""}
+      </div>
+    `;
+
+    submitBtn.disabled = false;
+    submitBtn.innerText = "🚀 Gửi Yêu Cầu VIP";
+
+    if (res.success) {
+      setTimeout(closeApprovalModal, 4000);
+    }
+  }).requestApprovalWithReasonAndDetail(reason, fbLink, supportEmail, otherReason);
+}
+
+function submitSStudentApprovalRequest() {
+  const role = (window.currentUserRole || currentUserRole || "").toUpperCase().trim();
+  if (role !== "STUDENT") {
+    showToast("❌ Chỉ tài khoản Học Viên (STUDENT) mới có thể yêu cầu nâng cấp lên S-STUDENT!", "error");
+    return;
+  }
+
+  const fbName = document.getElementById("sstudentFbName").value.trim();
+  const fbLink = document.getElementById("sstudentFbLink").value.trim();
+
+  const resultBox = document.getElementById("sstudentApprovalResult");
+  const submitBtn = document.getElementById("sstudentSubmitBtn");
+
+  if (!fbName || !fbLink) {
+    resultBox.innerHTML = `<div style="color: #c62828; padding: 10px; background: #ffebee; border-radius: 8px;">❌ Vui lòng nhập đầy đủ Tên Facebook và Link Facebook!</div>`;
+    return;
+  }
+
+  const combinedFbDetails = `Tên FB: ${fbName} - Link: ${fbLink}`;
+
+  // Disable button
+  submitBtn.disabled = true;
+  submitBtn.innerText = "⏳ Đang gửi...";
+  resultBox.innerHTML = "";
+
+  google.script.run.withSuccessHandler(function (res) {
+    const icon = res.success ? "✅" : "❌";
+    const bgColor = res.success ? "#f1f8e9" : "#ffebee";
+    const borderColor = res.success ? "#a5d6a7" : "#ef9a9a";
+    const textColor = res.success ? "#2e7d32" : "#c62828";
+
+    const [firstLine, ...rest] = res.message.split("\n");
+    const secondLine = rest.join("\n").trim();
+
+    resultBox.innerHTML = `
+      <div style="
+        background: ${bgColor};
+        border-left: 6px solid ${borderColor};
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-size: 14px;
+        animation: fadeIn 0.3s ease;
+        color: ${textColor};
+      ">
+        <div style="margin-bottom: 4px;">${icon} ${firstLine}</div>
+        ${secondLine ? `<div style="color: ${res.success ? '#2e7d32' : '#c62828'};">${secondLine}</div>` : ""}
+      </div>
+    `;
+
+    submitBtn.disabled = false;
+    submitBtn.innerText = "🚀 Gửi Yêu Cầu Xét Duyệt";
+
+    if (res.success) {
+      setTimeout(closeApprovalModal, 4000);
+    }
+  }).requestApprovalWithReasonAndDetail("sstudent", combinedFbDetails, "", "");
+}
+
+function handleSStudentEvidenceUpload() {
+  const fileInput = document.getElementById("sstudentEvidenceFile");
+  const file = fileInput.files[0];
+  if (!file) {
+    showToast("❌ Vui lòng chọn file minh chứng!", "error");
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64Data = e.target.result.split(',')[1];
+    const fileName = file.name;
+    const contentType = file.type;
+    
+    // Disable button, show loading
+    const submitBtn = document.getElementById("sstudentEvidenceSubmitBtn");
+    submitBtn.disabled = true;
+    submitBtn.innerText = "⏳ Đang tải...";
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Gửi Minh Chứng";
+        if (res.success) {
+          showToast("✅ " + res.message, "success");
+          fileInput.value = "";
+        } else {
+          showToast("❌ " + res.message, "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Gửi Minh Chứng";
+        showToast("❌ Lỗi: " + err, "error");
+      })
+      .uploadSStudentEvidence(base64Data, fileName, contentType);
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleReasonChange() {
+  const reason = document.getElementById("approvalReason").value;
+
+  // Ẩn tất cả ô phụ trong VIP Form
+  if (document.getElementById("fbLinkBox")) document.getElementById("fbLinkBox").style.display = "none";
+  if (document.getElementById("supportEmailBox")) document.getElementById("supportEmailBox").style.display = "none";
+  if (document.getElementById("otherReasonBox")) document.getElementById("otherReasonBox").style.display = "none";
+
+  if (reason === "fan") {
+    if (document.getElementById("fbLinkBox")) document.getElementById("fbLinkBox").style.display = "block";
+    if (document.getElementById("otherReasonBox")) {
+      document.getElementById("otherReasonBox").style.display = "block";
+      document.getElementById("otherReason").placeholder = "📝 Ghi chú hoặc lý do khác...";
+    }
+  } else if (reason === "support") {
+    if (document.getElementById("supportEmailBox")) document.getElementById("supportEmailBox").style.display = "block";
+  } else if (reason === "other") {
+    if (document.getElementById("otherReasonBox")) {
+      document.getElementById("otherReasonBox").style.display = "block";
+      document.getElementById("otherReason").placeholder = "📝 Mô tả lý do khác của bạn...";
+    }
+  }
+}
+
+function showErrorModal(message) {
+  const modal = document.getElementById("errorModal");
+  const msgBox = document.getElementById("errorModalMessage");
+  msgBox.textContent = message || "Có lỗi xảy ra.";
+  modal.style.display = "flex";
+}
+
+function closeErrorModal() {
+  const modal = document.getElementById("errorModal");
+  modal.style.display = "none";
+}
+
+function showPopup(title, message, buttonText, link) {
+  // Nếu popup đã tồn tại thì xóa
+  const oldPopup = document.getElementById("customPopup");
+  if (oldPopup) oldPopup.remove();
+
+  const popup = document.createElement("div");
+  popup.id = "customPopup";
+  popup.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6); z-index: 9999;
+    display: flex; justify-content: center; align-items: center;
+    font-family: 'Poppins', sans-serif;
+  `;
+
+  popup.innerHTML = `
+    <div style="
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      max-width: 420px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+      text-align: center;
+      animation: fadeIn 0.3s ease;
+      position: relative;
+    ">
+      <button onclick="document.getElementById('customPopup').remove()" class="modern-modal-close-btn" style="z-index: 10;">✕</button>
+      <div style="font-size: 20px; font-weight: bold; margin-bottom: 12px;">${title}</div>
+      <div style="margin-bottom: 20px; font-size: 16px;">${message}</div>
+      <a href="${link}" target="_blank" style="
+        background: #4caf50;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: bold;
+        display: inline-block;
+      ">${buttonText}</a>
+    </div>
+  `;
+
+  document.body.appendChild(popup);
+}
+
+let ads = [];
+
+let currentAdIndex = 0;
+let canClose = false;
+
+function showAd(index) {
+  if (typeof ads === 'undefined' || !ads || ads.length === 0) {
+    const adPopup = document.getElementById("adPopup");
+    if (adPopup) adPopup.style.display = "none";
+    return;
+  }
+  if (index >= ads.length || index < 0) {
+    currentAdIndex = 0;
+    const adPopup = document.getElementById("adPopup");
+    if (adPopup) adPopup.style.display = "none";
+    return;
+  }
+  const ad = ads[index];
+  if (!ad) {
+    const adPopup = document.getElementById("adPopup");
+    if (adPopup) adPopup.style.display = "none";
+    return;
+  }
+
+  const adImage = document.getElementById("adImage");
+  const ctaBtn = document.getElementById("ctaButton");
+  const titleEl = document.getElementById("adTitle");
+  const closeBtn = document.getElementById("closeAdBtn");
+  const adPopup = document.getElementById("adPopup");
+  const counterBadge = document.getElementById("adCounterBadge");
+  const navDotsContainer = document.getElementById("adNavDots");
+
+  if (adPopup) adPopup.style.display = "flex";
+
+  if (counterBadge) {
+    counterBadge.style.display = "none";
+  }
+
+  if (navDotsContainer) {
+    if (ads.length > 1) {
+      navDotsContainer.style.display = "flex";
+      navDotsContainer.innerHTML = ads.map((_, i) => 
+        `<span class="ad-dot ${i === index ? 'active' : ''}" onclick="goToAdIndex(${i})"></span>`
+      ).join("");
+    } else {
+      navDotsContainer.style.display = "none";
+      navDotsContainer.innerHTML = "";
+    }
+  }
+
+  canClose = false;
+  
+  // 🛡️ Safety fallback: Nếu ảnh load quá lâu (> 3s), vẫn cho tắt
+  setTimeout(() => {
+    if (!canClose) {
+      canClose = true;
+      if (closeBtn) closeBtn.style.display = "flex";
+    }
+  }, 3000);
+
+  if (adImage) {
+    adImage.style.display = "block";
+    adImage.style.opacity = 0;
+  }
+  if (closeBtn) closeBtn.style.display = "none"; // ẩn nút tắt trước khi ảnh load
+
+  if (adImage) {
+    adImage.onload = () => {
+      adImage.style.opacity = 1;
+      canClose = true;
+      if (closeBtn) closeBtn.style.display = "flex"; // hiện nút tắt sau khi ảnh load
+    };
+    
+    adImage.onerror = () => {
+      adImage.style.display = "none";
+      canClose = true;
+      if (closeBtn) closeBtn.style.display = "flex";
+    };
+
+    adImage.src = ad.img;
+  }
+
+  if (ctaBtn) {
+    ctaBtn.href = ad.link || "#";
+    const btnTextSpan = ctaBtn.querySelector("span");
+    if (btnTextSpan) {
+      btnTextSpan.innerText = ad.buttonText || "Tìm hiểu ngay";
+    } else {
+      ctaBtn.innerText = ad.buttonText || "Tìm hiểu ngay";
+    }
+  }
+
+  if (titleEl) {
+    titleEl.innerText = ad.title || "";
+  }
+}
+
+function goToAdIndex(index) {
+  if (index >= 0 && index < ads.length) {
+    currentAdIndex = index;
+    showAd(currentAdIndex);
+  }
+}
+
+function closePopup() {
+  if (!canClose) return; // ❌ Không cho tắt nếu ảnh chưa load xong
+
+  currentAdIndex++;
+  if (currentAdIndex < ads.length) {
+    showAd(currentAdIndex);
+    document.getElementById("adPopup").style.display = "flex";
+  } else {
+    document.getElementById("adPopup").style.display = "none";
+  }
+}
+
+</script>

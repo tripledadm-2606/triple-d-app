@@ -1,0 +1,621 @@
+<script>
+
+// Hàm safeRedirect hỗ trợ điều hướng an toàn và tin cậy tuyệt đối trong Sandbox Iframe (ví dụ: Google Sites)
+// Chỉ sử dụng gán trực tiếp window.location.href/replace độc lập, tránh tạo thẻ anchor click lập trình
+// vì hệ thống bảo mật của Google Apps Script (Warden) sẽ tự động hijack sự kiện click và ép đổi sang target="_top" gây lỗi Sandbox.
+function safeRedirect(url) {
+  if (!url) return;
+  
+  // Thêm tham số cache buster (t=timestamp) để tránh lỗi caching của Google Apps Script / trình duyệt
+  const timestamp = new Date().getTime();
+  let finalUrl = url;
+  if (url.includes('t=')) {
+    finalUrl = url.replace(/t=\d+/, 't=' + timestamp);
+  } else {
+    const separator = url.includes('?') ? '&' : '?';
+    finalUrl = url + separator + "t=" + timestamp;
+  }
+
+  console.log("safeRedirect -> " + finalUrl);
+
+  try {
+    // Sử dụng window.location.replace() để thay thế URL hiện tại trong lịch sử duyệt web,
+    // giúp tránh lỗi lặp vô tận khi nhấn nút "Back" của trình duyệt.
+    // Cách này hoạt động hoàn hảo cả khi chạy trực tiếp lẫn khi bị nhúng trong iframe sandboxed (Google Sites)
+    // mà không kích hoạt cảnh báo bảo mật về "allow-top-navigation" của trình duyệt.
+    window.location.replace(finalUrl);
+  } catch (err) {
+    console.error("Lỗi điều hướng bằng replace:", err);
+    try {
+      window.location.href = finalUrl;
+    } catch (err2) {
+      console.error("Lỗi fallback điều hướng:", err2);
+    }
+  }
+}
+
+const signUpButton = document.getElementById('signUp');
+  const signInButton = document.getElementById('signIn');
+  const container = document.getElementById('container');
+  const signupForm = document.getElementById('signupForm');
+  const loginForm = document.getElementById('loginForm');
+  const signupMessage = document.getElementById('signupMessage');
+  const loginMessage = document.getElementById('loginMessage');
+  const resendVerificationLink = document.getElementById('resendVerificationLink');
+
+  // Modals and related elements
+  const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+  const emailRequestModal = document.getElementById('emailRequestModal');
+  const otpEntryModal = document.getElementById('otpEntryModal');
+  const changePasswordModal = document.getElementById('changePasswordModal');
+  const forgotEmailInput = document.getElementById('forgotEmail');
+  const sendOtpButton = document.getElementById('sendOtpButton');
+  const forgotEmailMessage = document.getElementById('forgotEmailMessage');
+  const otpInput = document.getElementById('otpInput');
+  const verifyOtpButton = document.getElementById('verifyOtpButton');
+  const resendOtpButton = document.getElementById('resendOtpButton');
+  const otpTimerDisplay = document.getElementById('otpTimer');
+  const otpMessage = document.getElementById('otpMessage');
+  const newPasswordInput = document.getElementById('newPassword');
+  const confirmNewPasswordInput = document.getElementById('confirmNewPassword');
+  const resetPasswordButton = document.getElementById('resetPasswordButton');
+  const changePasswordMessage = document.getElementById('changePasswordMessage');
+  const closeButtons = document.querySelectorAll('.close-button');
+
+  let forgotPasswordEmail = ''; // To store the email for OTP/password reset
+  let otpCountdownInterval;
+
+  // --- UI Animation Handlers ---
+  const mobileToSignUp = document.getElementById('mobileToSignUp');
+  const mobileToSignIn = document.getElementById('mobileToSignIn');
+
+  signUpButton.addEventListener('click', () => {
+    container.classList.add("right-panel-active");
+    clearMessages();
+    clearFormFields();
+  });
+
+  signInButton.addEventListener('click', () => {
+    container.classList.remove("right-panel-active");
+    clearMessages();
+    clearFormFields();
+  });
+
+  if (mobileToSignUp) {
+    mobileToSignUp.addEventListener('click', (e) => {
+      e.preventDefault();
+      container.classList.add("right-panel-active");
+      clearMessages();
+      clearFormFields();
+    });
+  }
+
+  if (mobileToSignIn) {
+    mobileToSignIn.addEventListener('click', (e) => {
+      e.preventDefault();
+      container.classList.remove("right-panel-active");
+      clearMessages();
+      clearFormFields();
+    });
+  }
+
+  // --- Form Submission Handlers ---
+
+signupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('signupName').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+
+    // Honeypot anti-spam check
+    const honeypot = document.getElementById('signupHoneypot').value;
+    if (honeypot) {
+      showMessage(signupMessage, 'error', 'Hệ thống bảo mật phát hiện hành vi tự động.');
+      return;
+    }
+
+    if (!name || !email || !password) {
+      showMessage(signupMessage, 'error', 'Vui lòng điền đầy đủ thông tin.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      showMessage(signupMessage, 'error', 'Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+
+    showMessage(signupMessage, 'neutral', 'Đang đăng ký...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(signupMessage, 'success', response.message);
+          clearFormFields();
+          // container.classList.remove("right-panel-active"); // Switch to sign-in form
+        } else {
+          showMessage(signupMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(signupMessage, 'error', 'Đã xảy ra lỗi trong quá trình đăng ký.');
+        console.error(error);
+      })
+      .processSignup({ name, email, password });
+  });
+
+function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  
+  // 1️⃣ Chuẩn hóa độ phân giải màn hình (luôn là cạnh nhỏ x cạnh lớn, làm tròn số) 
+  let w = Math.floor(window.screen.width || 0);
+  let h = Math.floor(window.screen.height || 0);
+  const screenRes = w < h ? `${w}x${h}` : `${h}x${w}`;
+
+  // 2️⃣ Loại thiết bị: Phụ thuộc UA và TouchPoints (để phát hiện iPad/Tablet)
+  const isMobileUA = /Mobi|Android|iPhone|iPod/i.test(ua);
+  const isTabletUA = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const hasTouch = navigator.maxTouchPoints > 0;
+  
+  let deviceType = (isMobileUA || isTabletUA) ? "Mobile/Tablet" : "PC";
+  if (deviceType === "PC" && (w < 500 || h < 500) && hasTouch) {
+     deviceType = "Mobile/Tablet";
+  }
+
+  // 3️⃣ Hệ điều hành + kiến trúc
+  let os = "Unknown OS";
+  if (isTabletUA) {
+    os = "iPadOS";
+  } else if (/Windows NT/.test(ua)) {
+    os = "Windows";
+  } else if (/Mac OS X/.test(ua) && !/iPad|iPhone|iPod/.test(ua) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    os = "macOS";
+  } else if (/Android/.test(ua)) {
+    os = "Android";
+  } else if (/iPhone|iPod/.test(ua)) {
+    os = "iOS";
+  } else if (/Linux/.test(ua)) {
+    os = "Linux";
+  }
+
+  const arch = /WOW64|Win64|x64|amd64/i.test(ua) ? "64-bit" : "32-bit";
+
+  // 4️⃣ Trình duyệt (chỉ tên, không phiên bản)
+  let browser = "Unknown Browser";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/OPR|Opera/.test(ua)) browser = "Opera";
+  else if (/Chrome/.test(ua) && !/Edg\//.test(ua)) browser = "Chrome";
+  else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = "Safari";
+  else if (/Firefox/.test(ua)) browser = "Firefox";
+  else if (/MSIE|Trident/.test(ua)) browser = "Internet Explorer";
+
+  // 5️⃣ Lấy thông tin card đồ họa WebGL GPU và TimeZone
+  let gpuRenderer = "";
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      gpuRenderer = debugInfo ? (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "") : "";
+    }
+  } catch (e) {}
+
+  let tz = "";
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (e) {}
+
+  return {
+    deviceType: deviceType,
+    os: `${os} ${arch}`.trim(),
+    screen: screenRes,
+    browser: browser,
+    cpu: navigator.hardwareConcurrency || 0,
+    gpu: gpuRenderer,
+    tz: tz
+  };
+}
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+
+  // Honeypot anti-spam check
+  const honeypot = document.getElementById('loginHoneypot').value;
+  if (honeypot) {
+    showMessage(loginMessage, 'error', 'Hệ thống bảo mật phát hiện hành vi tự động.');
+    return;
+  }
+
+  if (!email || !password) {
+    showMessage(loginMessage, 'error', 'Vui lòng nhập email và mã truy cập.');
+    return;
+  }
+  if (!isValidEmail(email)) {
+    showMessage(loginMessage, 'error', 'Vui lòng nhập địa chỉ email hợp lệ.');
+    return;
+  }
+
+  showMessage(loginMessage, 'neutral', 'Đang đăng nhập...');
+  resendVerificationLink.style.display = 'none';
+
+  // 👆 Hàm tạo vân tay phần cứng thiết bị (Hardware Fingerprint)
+  function generateFingerprint() {
+    let renderer = "";
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (gl) {
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "";
+      }
+    } catch(e){}
+    
+    const sw = Math.floor(window.screen.width || 0);
+    const sh = Math.floor(window.screen.height || 0);
+    const minSide = Math.min(sw, sh);
+    const maxSide = Math.max(sw, sh);
+    const screenNormalized = `${minSide}x${maxSide}`;
+    
+    const isTablet = /iPad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const platformIdentifier = isTablet ? 'iPadOS' : (navigator.platform || 'unknown');
+
+    const parts = [
+      navigator.hardwareConcurrency || 4,
+      window.screen.colorDepth || 24,
+      renderer,
+      platformIdentifier,
+      screenNormalized,
+      navigator.maxTouchPoints > 0 ? "Touch" : "NoTouch"
+    ];
+    
+    const str = parts.join('|');
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return "DID-" + Math.abs(hash).toString(16);
+  }
+
+  const fingerprint = generateFingerprint();
+
+  // Đọc cookie helper
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  }
+
+  // Tìm DeviceID từ localStorage, Cookie hoặc sessionStorage
+  let deviceID = localStorage.getItem("deviceID") || getCookie("triple_did") || sessionStorage.getItem("deviceID");
+
+  // Nếu chưa có ID hợp lệ, khởi tạo bằng Fingerprint
+  if (!deviceID || typeof deviceID !== 'string' || deviceID.trim() === "" || deviceID === "Không rõ") {
+    deviceID = fingerprint;
+  }
+
+  // Đồng bộ lưu DeviceID bền vững vào cả 3 nơi
+  try {
+    localStorage.setItem("deviceID", deviceID);
+    sessionStorage.setItem("deviceID", deviceID);
+    document.cookie = `triple_did=${deviceID}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch (e) {}
+
+  const deviceInfo = getDeviceInfo();
+
+  google.script.run
+    .withSuccessHandler((response) => {
+      if (response.success) {
+        showMessage(loginMessage, 'success', response.message);
+        
+        // Show the beautiful mainPageLoader and restart progress animation!
+        const mainLoader = document.getElementById("mainPageLoader");
+        if (mainLoader) {
+          mainLoader.style.display = "flex";
+          mainLoader.style.opacity = "1";
+        }
+        if (typeof window.restartLoaderProgress === 'function') {
+          window.restartLoaderProgress();
+        }
+        
+        clearFormFields();
+        sessionStorage.setItem("userName", response.name);
+        sessionStorage.setItem("userEmail", email);
+        // Load data and transition views smoothly within SPA after 400ms
+        setTimeout(() => {
+          if (typeof window.checkSessionAndLoadData === 'function') {
+            window.checkSessionAndLoadData(false);
+          } else {
+            // Fallback in case of race condition
+            safeRedirect(response.redirectUrl);
+          }
+        }, 400);
+      } else {
+        showMessage(loginMessage, 'error', response.message);
+        if (response.unverified) {
+          resendVerificationLink.style.display = 'block';
+        }
+      }
+    })
+    .withFailureHandler((error) => {
+      showMessage(loginMessage, 'error', 'Đã xảy ra lỗi trong quá trình đăng nhập.');
+      console.error(error);
+    })
+  .processLogin({ email, password, deviceID, fingerprint, deviceInfo: JSON.stringify(deviceInfo) });
+});
+
+
+  // --- Forgot Password Flow Handlers ---
+
+  forgotPasswordLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    showModal(emailRequestModal);
+    forgotEmailInput.value = '';
+showMessage(forgotEmailMessage, '', '');
+  });
+
+  sendOtpButton.addEventListener('click', () => {
+    forgotPasswordEmail = forgotEmailInput.value.trim();
+    if (!isValidEmail(forgotPasswordEmail)) {
+      showMessage(forgotEmailMessage, 'error', 'Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+
+    showMessage(forgotEmailMessage, 'neutral', 'Đang gửi OTP...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(forgotEmailMessage, 'success', response.message);
+          setTimeout(() => {
+            hideModal(emailRequestModal);
+            showModal(otpEntryModal);
+            startOtpTimer(10); // 10 minutes
+            otpInput.value = ''; // Clear OTP input
+          showMessage(otpMessage, '', '');  // ✅ Không tạo hiệu ứng loading
+          }, 1000);
+        } else {
+          showMessage(forgotEmailMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(forgotEmailMessage, 'error', 'Lỗi khi gửi OTP.');
+        console.error(error);
+      })
+      .sendPasswordResetOTP(forgotPasswordEmail);
+  });
+
+  verifyOtpButton.addEventListener('click', () => {
+    const otp = otpInput.value.trim();
+    if (otp.length !== 6 || !/^\d+$/.test(otp)) {
+      showMessage(otpMessage, 'error', 'Vui lòng nhập mã OTP hợp lệ gồm 6 chữ số.');
+      return;
+    }
+
+    showMessage(otpMessage, 'neutral', 'Xác minh OTP...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(otpMessage, 'success', response.message);
+          clearInterval(otpCountdownInterval); // Stop timer
+          setTimeout(() => {
+            hideModal(otpEntryModal);
+            showModal(changePasswordModal);
+            newPasswordInput.value = '';
+            confirmNewPasswordInput.value = '';
+            showMessage(changePasswordMessage, '', '');  // ✅
+          }, 1000);
+        } else {
+          showMessage(otpMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(otpMessage, 'error', 'Có lỗi khi xác minh OTP.');
+        console.error(error);
+      })
+      .verifyOTP(forgotPasswordEmail, otp);
+  });
+
+  resendOtpButton.addEventListener('click', () => {
+    if (!forgotPasswordEmail) {
+      showMessage(otpMessage, 'error', 'Không có email nào được đăng ký để đặt lại mã truy cập. Vui lòng quay lại và nhập email của bạn.');
+      return;
+    }
+    showMessage(otpMessage, 'neutral', 'Đang gửi lại OTP...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(otpMessage, 'success', response.message);
+          startOtpTimer(10); // Restart timer
+          otpInput.value = '';
+        } else {
+          showMessage(otpMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(otpMessage, 'error', 'Có lỗi khi gửi lại OTP.');
+        console.error(error);
+      })
+      .sendPasswordResetOTP(forgotPasswordEmail);
+  });
+
+  resetPasswordButton.addEventListener('click', () => {
+    const newPassword = newPasswordInput.value;
+    const confirmNewPassword = confirmNewPasswordInput.value;
+
+    if (!newPassword || !confirmNewPassword) {
+      showMessage(changePasswordMessage, 'error', 'Vui lòng nhập và xác nhận mã truy cập mới của bạn.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      showMessage(changePasswordMessage, 'error', 'mã truy cập không khớp.');
+      return;
+    }
+    if (newPassword.length < 6) { // Basic password length validation
+      showMessage(changePasswordMessage, 'error', 'mã truy cập phải dài ít nhất 6 ký tự.');
+      return;
+    }
+
+    showMessage(changePasswordMessage, 'neutral', 'Đang đặt lại mã truy cập...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(changePasswordMessage, 'success', response.message);
+          setTimeout(() => {
+            hideModal(changePasswordModal);
+            // Optionally, switch back to login form or clear fields
+            clearFormFields();
+            container.classList.remove("right-panel-active");
+          }, 1000);
+        } else {
+          showMessage(changePasswordMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(changePasswordMessage, 'error', 'Lỗi khi đặt lại mã truy cập.');
+        console.error(error);
+      })
+      .resetPassword(forgotPasswordEmail, newPassword);
+  });
+
+  // --- Resend Verification Link Handler ---
+  resendVerificationLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    const emailToVerify = document.getElementById('loginEmail').value.trim();
+    if (!isValidEmail(emailToVerify)) {
+      showMessage(loginMessage, 'error', 'Vui lòng nhập email hợp lệ để gửi lại xác minh.');
+      return;
+    }
+    showMessage(loginMessage, 'neutral', 'Đang gửi lại email xác minh...');
+    google.script.run
+      .withSuccessHandler((response) => {
+        if (response.success) {
+          showMessage(loginMessage, 'success', response.message);
+        } else {
+          showMessage(loginMessage, 'error', response.message);
+        }
+      })
+      .withFailureHandler((error) => {
+        showMessage(loginMessage, 'error', 'Có lỗi khi gửi lại email xác minh.');
+        console.error(error);
+      })
+      .resendVerificationLink(emailToVerify);
+  });
+
+  // --- Helper Functions ---
+
+function showMessage(element, type, message) {
+  if (!element) return;
+  element.textContent = message || '';
+  if (!message) {
+    element.className = 'message';
+    element.style.display = 'none';
+    return;
+  }
+  element.style.display = 'block';
+  element.className = `message ${type}`;
+
+  if (type === 'neutral') {
+    element.classList.add("loading");  // 🔄 Thêm spinner nếu đang xử lý
+  } else {
+    element.classList.remove("loading"); // ❌ Gỡ spinner nếu xong
+  }
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  const svg = btn ? btn.querySelector('svg') : null;
+  if (svg) {
+    if (isPass) {
+      // Eye Slash Icon (Password shown -> click to hide)
+      svg.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />`;
+    } else {
+      // Eye Icon (Password hidden -> click to show)
+      svg.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12c1.274-4.057 5.064-7 9.542-7 4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />`;
+    }
+  }
+}
+window.togglePasswordVisibility = togglePasswordVisibility;
+
+  function clearMessages() {
+    signupMessage.textContent = '';
+    signupMessage.className = 'message';
+    loginMessage.textContent = '';
+    loginMessage.className = 'message';
+  }
+
+  function clearFormFields() {
+    document.getElementById('signupName').value = '';
+    document.getElementById('signupEmail').value = '';
+    document.getElementById('signupPassword').value = '';
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    if (document.getElementById('signupHoneypot')) document.getElementById('signupHoneypot').value = '';
+    if (document.getElementById('loginHoneypot')) document.getElementById('loginHoneypot').value = '';
+  }
+
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  function showModal(modalElement) {
+    modalElement.style.display = 'flex'; // Use flex to center content
+  }
+
+  function hideModal(modalElement) {
+    modalElement.style.display = 'none';
+  }
+
+  closeButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const modalId = button.dataset.modal;
+      hideModal(document.getElementById(modalId));
+      if (modalId === 'otpEntryModal') {
+        clearInterval(otpCountdownInterval); // Stop OTP timer if modal is closed
+      }
+    });
+  });
+
+  // Close modal if user clicks outside of it
+  window.addEventListener('click', (event) => {
+    if (event.target === emailRequestModal) {
+      hideModal(emailRequestModal);
+    }
+    if (event.target === otpEntryModal) {
+      hideModal(otpEntryModal);
+      clearInterval(otpCountdownInterval);
+    }
+    if (event.target === changePasswordModal) {
+      hideModal(changePasswordModal);
+    }
+  });
+
+  function startOtpTimer(minutes) {
+    clearInterval(otpCountdownInterval); // Clear any existing timer
+    let time = minutes * 60;
+    otpTimerDisplay.textContent = `OTP hết hạn trong ${formatTime(time)}`;
+    otpCountdownInterval = setInterval(() => {
+      time--;
+      otpTimerDisplay.textContent = `OTP hết hạn trong ${formatTime(time)}`;
+      if (time <= 0) {
+        clearInterval(otpCountdownInterval);
+        otpTimerDisplay.textContent = 'OTP đã hết hạn.';
+        showMessage(otpMessage, 'error', 'OTP đã hết hạn. Vui lòng gửi lại.');
+        otpInput.disabled = true; // Disable input if OTP expires
+        verifyOtpButton.disabled = true;
+      } else {
+        otpInput.disabled = false; // Enable input if OTP is active
+        verifyOtpButton.disabled = false;
+      }
+    }, 1000);
+  }
+
+  function formatTime(seconds) {
+    const min = Math.floor(seconds / 60);
+    const sec = seconds % 60;
+    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  }
+</script>

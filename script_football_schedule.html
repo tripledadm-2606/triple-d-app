@@ -1,0 +1,4215 @@
+<script>
+// ================= FOOTBALL LOGIC =================
+let footballMatches = [];
+let activeBetParams = null; // Holds temporary parameters for the active bet being placed
+
+function toggleFootballPopup(show) {
+  const popup = document.getElementById("footballPopup");
+  if (!popup) return;
+  if (show) {
+    popup.style.display = "flex";
+    updateFootballCoinDisplay();
+    switchFootballTab('matches');
+  } else {
+    popup.style.display = "none";
+  }
+}
+
+function renderFootballMatches() {
+  const container = document.getElementById("footballPopupContentArea");
+  if (!container) return;
+  if (!footballMatches || footballMatches.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#64748b;"><div style="font-size:48px; margin-bottom:12px;">🏟️</div><p style="font-weight:600;">Không có trận đấu lớn nào trong vòng 3 ngày tới.</p></div>`;
+    return;
+  }
+  
+  let html = `<div class="football-grid" style="grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 20px;">`;
+  footballMatches.forEach(m => {
+    const homeImg = m.homeCrest || 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png';
+    const awayImg = m.awayCrest || 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png';
+    
+    const isHomeFav = m.odds.favorite === "HOME";
+    const hdpHomeLabel = isHomeFav ? "Chủ (-0.5)" : "Chủ (+0.5)";
+    const hdpAwayLabel = isHomeFav ? "Khách (+0.5)" : "Khách (-0.5)";
+
+    let statsObj = footballBetStats[m.id] || null;
+    let fakeStats = generateFakeBetStats(m.id, statsObj);
+    
+    // Ghi đè Odds mặc định của API bằng odds tính toán từ volume người chơi
+    m.odds.home = fakeStats.oddsH;
+    m.odds.draw = fakeStats.oddsD;
+    m.odds.away = fakeStats.oddsA;
+
+    const isStarted = Date.now() >= m.dateMs;
+    const btnLockStyle = isStarted ? 'opacity: 0.55; cursor: not-allowed;' : '';
+
+    html += `
+      <div class="football-match-card ${isStarted ? 'fb-started-card' : ''}" style="display:flex; flex-direction:column; gap:14px; position:relative; overflow:hidden;">
+        <div style="font-size:11.5px; font-weight:700; color:#475569; background:#f1f5f9; padding:6px 12px; margin:-20px -20px 10px -20px; text-transform:uppercase; display:flex; align-items:center; justify-content:space-between;" class="fb-card-header">
+          <span style="display:flex; align-items:center; gap:6px;">🏆 ${m.competition}</span>
+          <span style="display:flex; align-items:center; gap:4px; color:${isStarted ? '#dc2626' : '#2563eb'};" class="fb-card-time">
+            ${isStarted ? '🔒 Đã bắt đầu (Khóa)' : '🕒 ' + m.dateStr}
+          </span>
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+           <div style="flex:1; text-align:center; display:flex; flex-direction:column; align-items:center;">
+             <div style="width:52px; height:52px; background:#f8fafc; border-radius:14px; display:flex; align-items:center; justify-content:center; padding:6px; box-shadow:0 3px 6px rgba(0,0,0,0.03); border:1px solid #e2e8f0; margin-bottom:8px;" class="fb-crest-wrapper">
+               <img src="${homeImg}" style="width:100%; height:100%; object-fit:contain;" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png'">
+             </div>
+             <strong style="font-size:14px; color:#0f172a; line-height:1.2; min-height:36px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" class="fb-team-name">${m.homeTeam}</strong>
+           </div>
+           
+           <div style="text-align:center; min-width:40px;">
+             <div style="font-weight:900; color:#64748b; font-size:11px; background:#e2e8f0; padding:4px 8px; border-radius:12px; letter-spacing:0.05em;" class="fb-vs-badge">VS</div>
+           </div>
+           
+           <div style="flex:1; text-align:center; display:flex; flex-direction:column; align-items:center;">
+             <div style="width:52px; height:52px; background:#f8fafc; border-radius:14px; display:flex; align-items:center; justify-content:center; padding:6px; box-shadow:0 3px 6px rgba(0,0,0,0.03); border:1px solid #e2e8f0; margin-bottom:8px;" class="fb-crest-wrapper">
+               <img src="${awayImg}" style="width:100%; height:100%; object-fit:contain;" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png'">
+             </div>
+             <strong style="font-size:14px; color:#0f172a; line-height:1.2; min-height:36px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" class="fb-team-name">${m.awayTeam}</strong>
+           </div>
+        </div>
+
+        ${isStarted ? `
+          <div class="fb-started-notice" style="font-size: 11.5px; font-weight: bold; text-align: center; padding: 8px; border-radius: 8px; margin-bottom: 4px;">
+            🔒 Trận đấu đã diễn ra hoặc đang thi đấu. Chức năng dự đoán đã khóa.
+          </div>
+        ` : ''}
+
+        <div style="border-top:1px dashed #e2e8f0;" class="fb-separator"></div>
+        
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🇪🇺 DỰ KIẾN KẾT QUẢ (1X2)</span>
+              <span style="color:#2563eb; font-size:10px;">Cả trận</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HOME', ${m.odds.home})" class="fb-odd-btn modern-odds-styled" style="${btnLockStyle}">
+                 <span class="btn-subtext">Chủ (1)</span>
+                 <span class="btn-odds">x${m.odds.home}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'DRAW', ${m.odds.draw})" class="fb-odd-btn draw modern-odds-styled" style="${btnLockStyle}">
+                 <span class="btn-subtext">Hòa (X)</span>
+                 <span class="btn-odds">x${m.odds.draw}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'AWAY', ${m.odds.away})" class="fb-odd-btn away-odds modern-odds-styled" style="${btnLockStyle}">
+                 <span class="btn-subtext">Khách (2)</span>
+                 <span class="btn-odds">x${m.odds.away}</span>
+               </button>
+            </div>
+            
+            <div style="margin-top: 10px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#64748b; font-weight:700; margin-bottom:8px;">
+                    <span style="display:flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg> XU HƯỚNG DỰ ĐOÁN</span>
+                    <span>👥 ${fakeStats.fakePlayers} lượt • 🪙 ${fakeStats.totalVol}</span>
+                </div>
+                <!-- Bar -->
+                <div style="height:6px; display:flex; border-radius:3px; overflow:hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                    <div style="width:${fakeStats.pH}%; background:#3b82f6;" title="Chủ: ${fakeStats.pH}%"></div>
+                    <div style="width:${fakeStats.pD}%; background:#94a3b8;" title="Hòa: ${fakeStats.pD}%"></div>
+                    <div style="width:${fakeStats.pA}%; background:#ef4444;" title="Khách: ${fakeStats.pA}%"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:800; margin-top:6px;">
+                    <span style="color:#2563eb;">${fakeStats.pH}%</span>
+                    <span style="color:#94a3b8;">${fakeStats.pD}%</span>
+                    <span style="color:#dc2626;">${fakeStats.pA}%</span>
+                </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🌏 DỰ BÁO CHÊNH LỆCH ƯU THẾ (+/- 0.5)</span>
+              <span style="color:#ef4444; font-size:10px; font-weight:bold;">🔥 Hot</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HDP_HOME', ${m.odds.hdpHome})" class="fb-odd-btn modern-odds-styled yellow-odds" style="${btnLockStyle}">
+                 <span class="btn-subtext">${hdpHomeLabel}</span>
+                 <span class="btn-odds">x${m.odds.hdpHome}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HDP_AWAY', ${m.odds.hdpAway})" class="fb-odd-btn modern-odds-styled yellow-odds" style="${btnLockStyle}">
+                 <span class="btn-subtext">${hdpAwayLabel}</span>
+                 <span class="btn-odds">x${m.odds.hdpAway}</span>
+               </button>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>⚖️ KÝ VỌNG TỔNG SỐ BÀN THẮNG (U/O 2.5)</span>
+              <span style="color:#10b981; font-size:10px;">Cả trận</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OU_OVER', ${m.odds.ouOver})" class="fb-odd-btn modern-odds-styled green-odds" style="${btnLockStyle}">
+                 <span class="btn-subtext">Nhiều (> 2.5)</span>
+                 <span class="btn-odds">x${m.odds.ouOver}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OU_UNDER', ${m.odds.ouUnder})" class="fb-odd-btn modern-odds-styled green-odds" style="${btnLockStyle}">
+                 <span class="btn-subtext">Ít (< 2.5)</span>
+                 <span class="btn-odds">x${m.odds.ouUnder}</span>
+               </button>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🎲 TỔNG SỐ BÀN THẮNG CHẴN / LẺ (EVEN / ODD)</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OE_EVEN', ${m.odds.oeEven || 1.90})" class="fb-odd-btn modern-odds-styled" style="${btnLockStyle}">
+                 <span class="btn-subtext">Chẵn (Even)</span>
+                 <span class="btn-odds">x${m.odds.oeEven || 1.90}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OE_ODD', ${m.odds.oeOdd || 1.90})" class="fb-odd-btn modern-odds-styled" style="${btnLockStyle}">
+                 <span class="btn-subtext">Lẻ (Odd)</span>
+                 <span class="btn-odds">x${m.odds.oeOdd || 1.90}</span>
+               </button>
+            </div>
+          </div>
+
+          <div style="margin-top:6px;">
+            <button onclick="toggleCorrectScoreGrid(${m.id})" style="width:100%; border:1.5px solid #cbd5e1; background:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;" class="fb-cs-btn">
+               🎯 TỶ SỐ CHÍNH XÁC (ĐỘ KHÓ CAO 🎁) 
+               <span id="csChevron-${m.id}" style="transition: transform 0.2s; font-size:10px;">▼</span>
+            </button>
+            
+            <div id="csGridContainer-${m.id}" class="fb-cs-grid" style="display:none; grid-template-columns: repeat(4, 1fr); gap:6px; margin-top:8px; border:1px solid #e2e8f0; background:#f8fafc; padding:8px; border-radius:12px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_0', ${m.odds.cs10})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">1-0</span>
+                 <span class="cs-score-odds">x${m.odds.cs10}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_2_0', ${m.odds.cs20})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">2-0</span>
+                 <span class="cs-score-odds">x${m.odds.cs20}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_2_1', ${m.odds.cs21})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">2-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs21}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_0_1', ${m.odds.cs01})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">0-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs01}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_0_2', ${m.odds.cs02})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">0-2</span>
+                 <span class="cs-score-odds">x${m.odds.cs02}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_2', ${m.odds.cs12})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">1-2</span>
+                 <span class="cs-score-odds">x${m.odds.cs12}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_1', ${m.odds.cs11})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">1-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs11}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_OTHER', ${m.odds.csOther})" class="cs-slot-btn" style="${btnLockStyle}">
+                 <span class="cs-score-text">Khác</span>
+                 <span class="cs-score-odds">x${m.odds.csOther}</span>
+               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+  
+  updateFootballCoinDisplay();
+  
+  const extraStyles = document.getElementById("footballPopupInternalStyles");
+  if (!extraStyles) {
+    const styleEl = document.createElement("style");
+    styleEl.id = "footballPopupInternalStyles";
+    styleEl.innerHTML = `
+      .fb-started-card { border-color: #fee2e2 !important; background: #fffdfd !important; }
+      body.dark-mode .fb-started-card { border-color: rgba(239, 68, 68, 0.2) !important; background: rgba(239, 68, 68, 0.03) !important; }
+      .fb-started-notice { background: #fef2f2; border: 1px dashed #fca5a5; color: #991b1b; }
+      body.dark-mode .fb-started-notice { background: rgba(239, 68, 68, 0.1) !important; border: 1px dashed rgba(239, 68, 68, 0.3) !important; color: #fca5a5 !important; }
+      body.dark-mode .fb-crest-wrapper { background: #1f2937 !important; border: 1px solid rgba(255,255,255,0.05) !important; }
+      body.dark-mode .fb-team-name { color: #f1f5f9 !important; }
+      body.dark-mode .fb-vs-badge { background: #374151 !important; color: #9ca3af !important; }
+      body.dark-mode .fb-odd-btn.draw { background: #374151 !important; color: #cbd5e1 !important; }
+      body.dark-mode .fb-odd-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}
+
+function updateFootballCoinDisplay() {
+  const coins = Number(getCleanLocalStorage('cached_userPoints') || 0).toLocaleString();
+  const d1 = document.getElementById("footballCoinDisplay");
+  const d2 = document.getElementById("popupFootballCoinDisplay");
+  if (d1) d1.innerText = coins;
+  if (d2) d2.innerText = coins;
+}
+
+function switchFootballTab(tab) {
+  const tabMatchesBtn = document.getElementById("footballTabMatches");
+  const tabHistoryBtn = document.getElementById("footballTabHistory");
+  
+  if (tab === 'matches') {
+    if (tabMatchesBtn) {
+      tabMatchesBtn.style.background = "#2563eb";
+      tabMatchesBtn.style.color = "white";
+    }
+    if (tabHistoryBtn) {
+      tabHistoryBtn.style.background = "transparent";
+      tabHistoryBtn.style.color = "#64748b";
+    }
+    loadFootballMatches();
+  } else {
+    if (tabMatchesBtn) {
+      tabMatchesBtn.style.background = "transparent";
+      tabMatchesBtn.style.color = "#64748b";
+    }
+    if (tabHistoryBtn) {
+      tabHistoryBtn.style.background = "#8b5cf6";
+      tabHistoryBtn.style.color = "white";
+    }
+    loadMyFootballBets();
+  }
+}
+
+let footballBetStats = {};
+
+function loadFootballMatches() {
+  const container = document.getElementById("footballPopupContentArea");
+  if(!container) return;
+  container.innerHTML = `<div style="text-align:center; padding:50px;"><div class="spinner" style="margin:0 auto;"></div><p style="margin-top:12px; color:#64748b; font-weight:500;">Đang tải danh sách các trận đấu quốc tế...</p></div>`;
+  
+  google.script.run
+    .withSuccessHandler((stats) => {
+      footballBetStats = stats || {};
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (res && res.success) {
+            footballMatches = res.matches;
+            renderFootballMatches();
+          } else {
+            container.innerHTML = `<div style="text-align:center; color:#ef4444; padding:40px; font-weight:bold;">⚠️ Không có kết nối hoặc API lỗi: ${res ? res.message : "Hãy tải lại trang."}</div>`;
+          }
+        })
+        .withFailureHandler((err) => {
+          container.innerHTML = `<div style="text-align:center; color:#ef4444; padding:40px; font-weight:bold;">⚠️ Lỗi kết nối máy chủ: ${err.message}</div>`;
+        })
+        .getFootballMatches();
+    })
+    .withFailureHandler((err) => {
+      // Fallback
+      footballBetStats = {};
+      google.script.run.withSuccessHandler((res) => {
+        if (res && res.success) {
+          footballMatches = res.matches;
+          renderFootballMatches();
+        }
+      }).getFootballMatches();
+    })
+    .getFootballBetStats();
+}
+
+function toggleCorrectScoreGrid(matchId) {
+  const grid = document.getElementById("csGridContainer-" + matchId);
+  const chevron = document.getElementById("csChevron-" + matchId);
+  if (!grid || !chevron) return;
+  if (grid.style.display === "none") {
+    grid.style.display = "grid";
+    chevron.style.transform = "rotate(180deg)";
+  } else {
+    grid.style.display = "none";
+    chevron.style.transform = "rotate(0deg)";
+  }
+}
+
+function generateFakeBetStats(matchId, realStats) {
+  let seed = matchId * 1234.5678;
+  function rand(min, max) {
+     seed = (seed * 9301 + 49297) % 233280;
+     return min + (seed / 233280) * (max - min);
+  }
+  
+  let baseHome = rand(2000, 50000);
+  let baseDraw = rand(1000, 15000);
+  let baseAway = rand(2000, 45000);
+  let fakePlayers = Math.floor(rand(10, 500));
+  
+  if (realStats && realStats._total > 0) {
+      let rHome = realStats.HOME || 0;
+      let rDraw = realStats.DRAW || 0;
+      let rAway = realStats.AWAY || 0;
+      let totalR = rHome + rDraw + rAway;
+      
+      if (totalR > 0) {
+          let pHome = rHome / totalR;
+          let pDraw = rDraw / totalR;
+          let pAway = rAway / totalR;
+          
+          let totalFake = baseHome + baseDraw + baseAway;
+          baseHome = totalFake * (0.2 + 0.8 * pHome) * rand(0.9, 1.1);
+          baseDraw = totalFake * (0.2 + 0.8 * pDraw) * rand(0.9, 1.1);
+          baseAway = totalFake * (0.2 + 0.8 * pAway) * rand(0.9, 1.1);
+          
+          fakePlayers += (realStats._count || 0) * Math.floor(rand(2, 5));
+      }
+  }
+  
+  let sum = baseHome + baseDraw + baseAway;
+  let pH = Math.round((baseHome / sum) * 100) || 33;
+  let pD = Math.round((baseDraw / sum) * 100) || 33;
+  let pA = Math.max(0, 100 - pH - pD);
+  
+  // Tính tỷ lệ odds thay đổi linh hoạt theo xu hướng dự đoán, giới hạn tối đa tự nhiên dưới 4
+  let margin = 0.95; // RTP
+  
+  function getNaturalOdds(p) {
+    let raw = margin / (Math.max(1, p) / 100);
+    if (raw > 3.65) {
+      return rand(3.65, 3.98);
+    }
+    return Math.max(1.05, raw);
+  }
+
+  let oddsH = getNaturalOdds(pH).toFixed(2);
+  let oddsD = getNaturalOdds(pD).toFixed(2);
+  let oddsA = getNaturalOdds(pA).toFixed(2);
+
+  let totalVol = (sum / 1000).toFixed(1) + "K";
+  
+  return { pH, pD, pA, totalVol, fakePlayers, oddsH, oddsD, oddsA };
+}
+
+function renderFootballMatches() {
+  const container = document.getElementById("footballPopupContentArea");
+  if (!container) return;
+  if (!footballMatches || footballMatches.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:50px; color:#64748b;"><div style="font-size:48px; margin-bottom:12px;">🏟️</div><p style="font-weight:600;">Không có trận đấu lớn nào trong vòng 3 ngày tới.</p></div>`;
+    return;
+  }
+  
+  let html = `<div class="football-grid" style="grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 20px;">`;
+  footballMatches.forEach(m => {
+    const homeImg = m.homeCrest || 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png';
+    const awayImg = m.awayCrest || 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png';
+    
+    const isHomeFav = m.odds.favorite === "HOME";
+    const hdpHomeLabel = isHomeFav ? "Chủ (-0.5)" : "Chủ (+0.5)";
+    const hdpAwayLabel = isHomeFav ? "Khách (+0.5)" : "Khách (-0.5)";
+
+    let statsObj = footballBetStats[m.id] || null;
+    let fakeStats = generateFakeBetStats(m.id, statsObj);
+    
+    // Ghi đè Odds mặc định của API bằng odds tính toán từ volume người chơi
+    m.odds.home = fakeStats.oddsH;
+    m.odds.draw = fakeStats.oddsD;
+    m.odds.away = fakeStats.oddsA;
+
+    html += `
+      <div class="football-match-card" style="display:flex; flex-direction:column; gap:14px; position:relative; overflow:hidden;">
+        <div style="font-size:11.5px; font-weight:700; color:#475569; background:#f1f5f9; padding:6px 12px; margin:-20px -20px 10px -20px; text-transform:uppercase; display:flex; align-items:center; justify-content:space-between;" class="fb-card-header">
+          <span style="display:flex; align-items:center; gap:6px;">🏆 ${m.competition}</span>
+          <span style="display:flex; align-items:center; gap:4px; color:#2563eb;" class="fb-card-time">🕒 ${m.dateStr}</span>
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+           <div style="flex:1; text-align:center; display:flex; flex-direction:column; align-items:center;">
+             <div style="width:52px; height:52px; background:#f8fafc; border-radius:14px; display:flex; align-items:center; justify-content:center; padding:6px; box-shadow:0 3px 6px rgba(0,0,0,0.03); border:1px solid #e2e8f0; margin-bottom:8px;" class="fb-crest-wrapper">
+               <img src="${homeImg}" style="width:100%; height:100%; object-fit:contain;" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png'">
+             </div>
+             <strong style="font-size:14px; color:#0f172a; line-height:1.2; min-height:36px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" class="fb-team-name">${m.homeTeam}</strong>
+           </div>
+           
+           <div style="text-align:center; min-width:40px;">
+             <div style="font-weight:900; color:#64748b; font-size:11px; background:#e2e8f0; padding:4px 8px; border-radius:12px; letter-spacing:0.05em;" class="fb-vs-badge">VS</div>
+           </div>
+           
+           <div style="flex:1; text-align:center; display:flex; flex-direction:column; align-items:center;">
+             <div style="width:52px; height:52px; background:#f8fafc; border-radius:14px; display:flex; align-items:center; justify-content:center; padding:6px; box-shadow:0 3px 6px rgba(0,0,0,0.03); border:1px solid #e2e8f0; margin-bottom:8px;" class="fb-crest-wrapper">
+               <img src="${awayImg}" style="width:100%; height:100%; object-fit:contain;" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_image_%28transparent%29.png'">
+             </div>
+             <strong style="font-size:14px; color:#0f172a; line-height:1.2; min-height:36px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" class="fb-team-name">${m.awayTeam}</strong>
+           </div>
+        </div>
+
+        <div style="border-top:1px dashed #e2e8f0;" class="fb-separator"></div>
+        
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🇪🇺 DỰ KIẾN KẾT QUẢ (1X2)</span>
+              <span style="color:#2563eb; font-size:10px;">Cả trận</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HOME', ${m.odds.home})" class="fb-odd-btn modern-odds-styled">
+                 <span class="btn-subtext">Chủ (1)</span>
+                 <span class="btn-odds">x${m.odds.home}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'DRAW', ${m.odds.draw})" class="fb-odd-btn draw modern-odds-styled">
+                 <span class="btn-subtext">Hòa (X)</span>
+                 <span class="btn-odds">x${m.odds.draw}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'AWAY', ${m.odds.away})" class="fb-odd-btn away-odds modern-odds-styled">
+                 <span class="btn-subtext">Khách (2)</span>
+                 <span class="btn-odds">x${m.odds.away}</span>
+               </button>
+            </div>
+            
+            <div style="margin-top: 10px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#64748b; font-weight:700; margin-bottom:8px;">
+                    <span style="display:flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg> XU HƯỚNG DỰ ĐOÁN</span>
+                    <span>👥 ${fakeStats.fakePlayers} lượt • 🪙 ${fakeStats.totalVol}</span>
+                </div>
+                <!-- Bar -->
+                <div style="height:6px; display:flex; border-radius:3px; overflow:hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                    <div style="width:${fakeStats.pH}%; background:#3b82f6;" title="Chủ: ${fakeStats.pH}%"></div>
+                    <div style="width:${fakeStats.pD}%; background:#94a3b8;" title="Hòa: ${fakeStats.pD}%"></div>
+                    <div style="width:${fakeStats.pA}%; background:#ef4444;" title="Khách: ${fakeStats.pA}%"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:800; margin-top:6px;">
+                    <span style="color:#2563eb;">${fakeStats.pH}%</span>
+                    <span style="color:#94a3b8;">${fakeStats.pD}%</span>
+                    <span style="color:#dc2626;">${fakeStats.pA}%</span>
+                </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🌏 DỰ BÁO CHÊNH LỆCH ƯU THẾ (+/- 0.5)</span>
+              <span style="color:#ef4444; font-size:10px; font-weight:bold;">🔥 Hot</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HDP_HOME', ${m.odds.hdpHome})" class="fb-odd-btn modern-odds-styled yellow-odds">
+                 <span class="btn-subtext">${hdpHomeLabel}</span>
+                 <span class="btn-odds">x${m.odds.hdpHome}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'HDP_AWAY', ${m.odds.hdpAway})" class="fb-odd-btn modern-odds-styled yellow-odds">
+                 <span class="btn-subtext">${hdpAwayLabel}</span>
+                 <span class="btn-odds">x${m.odds.hdpAway}</span>
+               </button>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>⚖️ KỲ VỌNG TỔNG SỐ BÀN THẮNG (U/O 2.5)</span>
+              <span style="color:#10b981; font-size:10px;">Cả trận</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OU_OVER', ${m.odds.ouOver})" class="fb-odd-btn modern-odds-styled green-odds">
+                 <span class="btn-subtext">Nhiều (> 2.5)</span>
+                 <span class="btn-odds">x${m.odds.ouOver}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OU_UNDER', ${m.odds.ouUnder})" class="fb-odd-btn modern-odds-styled green-odds">
+                 <span class="btn-subtext">Ít (< 2.5)</span>
+                 <span class="btn-odds">x${m.odds.ouUnder}</span>
+               </button>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🎲 TỔNG SỐ BÀN THẮNG CHẴN / LẺ (EVEN / ODD)</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OE_EVEN', ${m.odds.oeEven || 1.90})" class="fb-odd-btn modern-odds-styled">
+                 <span class="btn-subtext">Chẵn (Even)</span>
+                 <span class="btn-odds">x${m.odds.oeEven || 1.90}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'OE_ODD', ${m.odds.oeOdd || 1.90})" class="fb-odd-btn modern-odds-styled">
+                 <span class="btn-subtext">Lẻ (Odd)</span>
+                 <span class="btn-odds">x${m.odds.oeOdd || 1.90}</span>
+               </button>
+            </div>
+          </div>
+
+          <div style="margin-top:6px;">
+            <button onclick="toggleCorrectScoreGrid(${m.id})" style="width:100%; border:1.5px solid #cbd5e1; background:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;" class="fb-cs-btn">
+               🎯 TỶ SỐ CHÍNH XÁC (ĐỘ KHÓ CAO 🎁) 
+               <span id="csChevron-${m.id}" style="transition: transform 0.2s; font-size:10px;">▼</span>
+            </button>
+            
+            <div id="csGridContainer-${m.id}" class="fb-cs-grid" style="display:none; grid-template-columns: repeat(4, 1fr); gap:6px; margin-top:8px; border:1px solid #e2e8f0; background:#f8fafc; padding:8px; border-radius:12px;">
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_0', ${m.odds.cs10})" class="cs-slot-btn">
+                 <span class="cs-score-text">1-0</span>
+                 <span class="cs-score-odds">x${m.odds.cs10}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_2_0', ${m.odds.cs20})" class="cs-slot-btn">
+                 <span class="cs-score-text">2-0</span>
+                 <span class="cs-score-odds">x${m.odds.cs20}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_2_1', ${m.odds.cs21})" class="cs-slot-btn">
+                 <span class="cs-score-text">2-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs21}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_0_1', ${m.odds.cs01})" class="cs-slot-btn">
+                 <span class="cs-score-text">0-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs01}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_0_2', ${m.odds.cs02})" class="cs-slot-btn">
+                 <span class="cs-score-text">0-2</span>
+                 <span class="cs-score-odds">x${m.odds.cs02}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_2', ${m.odds.cs12})" class="cs-slot-btn">
+                 <span class="cs-score-text">1-2</span>
+                 <span class="cs-score-odds">x${m.odds.cs12}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_1_1', ${m.odds.cs11})" class="cs-slot-btn">
+                 <span class="cs-score-text">1-1</span>
+                 <span class="cs-score-odds">x${m.odds.cs11}</span>
+               </button>
+               <button onclick="promptFootballBet(${m.id}, '${m.homeTeam} vs ${m.awayTeam}', 'CS_OTHER', ${m.odds.csOther})" class="cs-slot-btn">
+                 <span class="cs-score-text">Khác</span>
+                 <span class="cs-score-odds">x${m.odds.csOther}</span>
+               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+  
+  updateFootballCoinDisplay();
+  
+  const extraStyles = document.getElementById("footballPopupInternalStyles");
+  if (!extraStyles) {
+    const styleEl = document.createElement("style");
+    styleEl.id = "footballPopupInternalStyles";
+    styleEl.innerHTML = `
+      body.dark-mode .fb-crest-wrapper { background: #1f2937 !important; border: 1px solid rgba(255,255,255,0.05) !important; }
+      body.dark-mode .fb-team-name { color: #f1f5f9 !important; }
+      body.dark-mode .fb-vs-badge { background: #374151 !important; color: #9ca3af !important; }
+      body.dark-mode .fb-odd-btn.draw { background: #374151 !important; color: #cbd5e1 !important; }
+      body.dark-mode .fb-odd-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}
+
+function getFootballPredictionExplanation(betOn, matchId, homeTeam, awayTeam) {
+  const isHomeFav = (matchId % 2 === 0);
+  switch (betOn) {
+    case "HOME":
+      return `
+        <div style="margin-top: 10px; padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; font-size: 12.5px; color: #1e3a8a;">
+          🎯 <strong>Mô tả phương án:</strong> Dự đoán đội nhà <strong>${homeTeam}</strong> giành chiến thắng chung cuộc.<br/>
+          📊 <strong>Cách tính điểm:</strong> Nếu trận đấu kết thúc với phần thắng thuộc về <strong>${homeTeam}</strong> (ví dụ: 1-0, 2-1, 3-0,...), bạn sẽ nhận lại số Coin gửi kèm hệ số thưởng. Nếu kết quả là hòa hoặc đối thủ thắng, dự báo này chưa chính xác.
+        </div>
+      `;
+    case "DRAW":
+      return `
+        <div style="margin-top: 10px; padding: 12px; background: #f8fafc; border-left: 4px solid #64748b; border-radius: 6px; font-size: 12.5px; color: #334155;">
+          🎯 <strong>Mô tả phương án:</strong> Kỳ vọng hai đội hòa nhau sau thời gian thi đấu chính thức.<br/>
+          📊 <strong>Cách tính điểm:</strong> Nếu trận đấu kết thúc với tỷ số hòa (ví dụ: 0-0, 1-1, 2-2,...), dự đoán của bạn chính xác tuyệt đối. Nếu bất kỳ đội nào thắng cuộc, dự đoán này chưa chính xác.
+        </div>
+      `;
+    case "AWAY":
+      return `
+        <div style="margin-top: 10px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 6px; font-size: 12.5px; color: #065f46;">
+          🎯 <strong>Mô tả phương án:</strong> Dự đoán đội khách <strong>${awayTeam}</strong> giành chiến thắng chung cuộc.<br/>
+          📊 <strong>Cách tính điểm:</strong> Nếu trận đấu kết thúc với phần thắng thuộc về <strong>${awayTeam}</strong>, bạn nhận lại số Coin gửi kèm hệ số thưởng. Nếu kết quả là hòa hoặc đội nhà thắng, dự báo chưa chính xác.
+        </div>
+      `;
+    case "HDP_HOME":
+      if (isHomeFav) {
+        return `
+          <div style="margin-top: 10px; padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 12.5px; color: #b14327;">
+            🎯 <strong>Mô tả phương án:</strong> Dự báo đội nhà <strong>${homeTeam}</strong> (Đội mạnh hơn) thắng cách biệt tối thiểu 1 bàn (chênh lệch -0.5).<br/>
+            📊 <strong>Cách tính điểm:</strong> Nếu <strong>${homeTeam}</strong> thắng trận (ví dụ: 1-0, 2-1,...), bạn nhận thưởng hoàn toàn. Nếu kết quả là Hòa hoặc đối thủ thắng, dự báo chưa chính xác.
+          </div>
+        `;
+      } else {
+        return `
+          <div style="margin-top: 10px; padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 12.5px; color: #b14327;">
+            🎯 <strong>Mô tả phương án:</strong> Dự báo đội nhà <strong>${homeTeam}</strong> (Đội yếu hơn) giữ được kết quả có lợi từ Hòa đến Thắng nhờ cộng ưu thế (+0.5).<br/>
+            📊 <strong>Cách tính điểm:</strong> Chỉ cần trận đấu kết thúc với kết quả Hòa hoặc <strong>${homeTeam}</strong> thắng, bạn sẽ được thưởng. Bạn chỉ không đạt điểm nếu đối thủ thắng trận.
+          </div>
+        `;
+      }
+    case "HDP_AWAY":
+      if (isHomeFav) {
+        return `
+          <div style="margin-top: 10px; padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 12.5px; color: #b14327;">
+            🎯 <strong>Mô tả phương án:</strong> Dự báo đội khách <strong>${awayTeam}</strong> giữ được kết quả từ Hòa đến Thắng nhờ cộng ưu thế (+0.5).<br/>
+            📊 <strong>Cách tính điểm:</strong> Chỉ cần kết quả trận đấu là Hòa hoặc đội khách <strong>${awayTeam}</strong> giành chiến thắng, bạn sẽ nhận thưởng. Nếu đội nhà thắng trận, dự báo chưa chính xác.
+          </div>
+        `;
+      } else {
+        return `
+          <div style="margin-top: 10px; padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 12.5px; color: #b14327;">
+            🎯 <strong>Mô tả phương án:</strong> Dự báo đội khách <strong>${awayTeam}</strong> (Đội mạnh hơn) thắng tối thiểu 1 bàn cách biệt (chênh lệch -0.5).<br/>
+            📊 <strong>Cách tính điểm:</strong> Đội khách <strong>${awayTeam}</strong> phải giành chiến thắng (1-0, 2-1,...) để bạn nhận thưởng. Nếu kết quả Hòa hoặc chủ nhà thắng, dự dự kiến không chuẩn xác.
+          </div>
+        `;
+      }
+    case "OU_OVER":
+      return `
+        <div style="margin-top: 10px; padding: 12px; background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 6px; font-size: 12.5px; color: #14532d;">
+          🎯 <strong>Mô tả phương án:</strong> Kỳ vọng trận đấu cởi mở, lối chơi tấn công với tổng số bàn thắng từ cả 2 đội là **từ 3 bàn trở lên** (Ví dụ: 2-1, 3-0, 2-2, 3-1, 4-0...).<br/>
+          📊 <strong>Cách tính điểm:</strong> Nếu tổng số bàn thắng thực tế của hai đội từ 3 bàn trở lên, bạn nhận thưởng. Nếu tổng số bàn thắng từ 2 bàn trở xuống (ví dụ 1-0, 0-0, 1-1, 2-0), dự đoán chưa chuẩn xác.
+        </div>
+      `;
+    case "OU_UNDER":
+      return `
+        <div style="margin-top: 10px; padding: 12px; background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 6px; font-size: 12.5px; color: #14532d;">
+          🎯 <strong>Mô tả phương án:</strong> Kỳ vọng trận đấu chặt chẽ, nặng tính chiến thuật với tổng số bàn thắng **từ 2 bàn trở xuống** (Ví dụ: 0-0, 1-0, 0-1, 1-1, 2-0, 0-2).<br/>
+          📊 <strong>Cách tính điểm:</strong> Nếu trận đấu thực tế có tối đa là 2 bàn thắng ghi được bởi cả 2 đội, bạn nhận thưởng. Nếu tổng số bàn ghi được từ 3 bàn trở lên (như 2-1, 3-0,...), dự báo chưa chuẩn xác.
+        </div>
+      `;
+    default:
+      if (betOn.startsWith("CS_")) {
+        let scoreLabel = "";
+        if (betOn === "CS_OTHER") {
+          scoreLabel = "tỷ số đặc biệt chính xác do bạn nhập, nằm ngoài các tỷ số hiển thị sẵn (ví dụ: 3-0, 3-1, 4-2,...)";
+        } else {
+          const p = betOn.split("_");
+          scoreLabel = `chính xác là ${p[1]} - ${p[2]}`;
+        }
+        return `
+          <div style="margin-top: 10px; padding: 12px; background: #fdf2f8; border-left: 4px solid #ec4899; border-radius: 6px; font-size: 12.5px; color: #701a75;">
+            🎯 <strong>Mô tả phương án:</strong> Thử thách chi tiết tỷ số chính xác của cuộc đọ sức.<br/>
+            📊 <strong>Cách tính điểm:</strong> Trận đấu kết thúc với kết quả <strong>${scoreLabel}</strong> thì bạn nhận thưởng với hệ số nhân điểm lớn. Các tỷ số khác đều chưa đạt yêu cầu.
+          </div>
+        `;
+      }
+      return "";
+  }
+}
+
+function promptFootballBet(matchId, desc, betOn, odds) {
+  const match = footballMatches.find(m => m.id === matchId);
+  if (match && Date.now() >= match.dateMs) {
+    showToast("⚠️ Trận đấu đã diễn ra hoặc đang thi đấu. Chức năng dự đoán đã khóa!", "error");
+    return;
+  }
+  activeBetParams = { matchId, desc, betOn, odds };
+  
+  let label = betOn;
+  if (betOn === "HOME") label = "Chủ nhà Thắng (Dự kiến Kết quả - 1)";
+  else if (betOn === "DRAW") label = "Hai đội Hòa (Dự kiến Kết quả - X)";
+  else if (betOn === "AWAY") label = "Khách Thắng (Dự kiến Kết quả - 2)";
+  else if (betOn === "HDP_HOME") {
+    const isHomeFav = (matchId % 2 === 0);
+    label = isHomeFav ? "Chủ nhà ưu thế 0.5 (Chênh lệch Kỳ vọng)" : "Chủ nhà được cộng ưu thế 0.5 (Chênh lệch Kỳ vọng)";
+  }
+  else if (betOn === "HDP_AWAY") {
+    const isHomeFav = (matchId % 2 === 0);
+    label = isHomeFav ? "Khách được cộng ưu thế 0.5 (Chênh lệch Kỳ vọng)" : "Khách ưu thế 0.5 (Chênh lệch Kỳ vọng)";
+  }
+  else if (betOn === "OU_OVER") label = "Nhiều hơn 2.5 bàn thắng (Trận đấu cởi mở)";
+  else if (betOn === "OU_UNDER") label = "Ít hơn 2.5 bàn thắng (Trận đấu chặt chẽ)";
+  else if (betOn.startsWith("CS_")) {
+    if (betOn === "CS_OTHER") label = "Tỉ số khác (Điền tỷ số dự đoán chính xác)";
+    else {
+      const parts = betOn.split("_");
+      label = `Dự kiến tỉ số chi tiết: ${parts[1]} - ${parts[2]}`;
+    }
+  }
+
+  const dialog = document.getElementById("footballBetDialog");
+  const matchInfo = document.getElementById("footballBetMatchInfo");
+  const amountInput = document.getElementById("footballBetAmountInput");
+  const calcBox = document.getElementById("footballBetEstRewardBox");
+  const errorDiv = document.getElementById("footballBetDialogError");
+  
+  if (!dialog || !matchInfo || !amountInput) return;
+  
+  amountInput.value = "";
+  if (calcBox) calcBox.style.display = "none";
+  if (errorDiv) errorDiv.style.display = "none";
+
+  // Manage custom score entry display & values
+  const customScoreGroup = document.getElementById("footballCustomScoreGroup");
+  const customHomeInput = document.getElementById("footballCustomHomeScore");
+  const customAwayInput = document.getElementById("footballCustomAwayScore");
+  if (customScoreGroup) {
+    if (betOn === "CS_OTHER") {
+      customScoreGroup.style.display = "block";
+      if (customHomeInput) {
+        customHomeInput.value = "";
+        customHomeInput.disabled = false;
+      }
+      if (customAwayInput) {
+        customAwayInput.value = "";
+        customAwayInput.disabled = false;
+      }
+    } else {
+      customScoreGroup.style.display = "none";
+    }
+  }
+  
+  const teams = desc.split(" vs ");
+  const homeTeam = teams[0] || "Đội nhà";
+  const awayTeam = teams[1] || "Đội khách";
+  const explanationHtml = getFootballPredictionExplanation(betOn, matchId, homeTeam, awayTeam);
+
+  matchInfo.innerHTML = `
+    <div style="font-weight:700; font-size:15px; margin-bottom:8px;">${desc}</div>
+    <div style="font-size:13px;">Phương án dự đoán: <strong style="color:#2563eb;">${label}</strong></div>
+    <div style="font-size:13px; margin-top:4px;">Hệ số điểm thưởng: <strong style="color:#10b981;">x${odds}</strong></div>
+    <div style="margin-top:10px; border-top:1px dashed #cbd5e1; padding-top:10px;">
+      ${explanationHtml}
+    </div>
+  `;
+  
+  dialog.style.display = "flex";
+  
+  setTimeout(() => amountInput.focus(), 60);
+  
+  const confirmBtn = document.getElementById("footballBetConfirmBtn");
+  if (confirmBtn) {
+    confirmBtn.onclick = function() {
+      submitFootballBet();
+    };
+  }
+}
+
+function updateFootballEstReward() {
+  const amountInput = document.getElementById("footballBetAmountInput");
+  const calcBox = document.getElementById("footballBetEstRewardBox");
+  const rewardText = document.getElementById("footballEstRewardText");
+  const errorDiv = document.getElementById("footballBetDialogError");
+  
+  if (!amountInput || !calcBox || !rewardText || !activeBetParams) return;
+  
+  const val = parseInt(amountInput.value);
+  if (isNaN(val) || val <= 0) {
+    calcBox.style.display = "none";
+    if (errorDiv) errorDiv.style.display = "none";
+    return;
+  }
+  
+  if (val < 10) {
+    if (errorDiv) {
+      errorDiv.innerHTML = "Số lượng tham gia tối thiểu là 10 TD Coin.";
+      errorDiv.style.display = "block";
+    }
+    calcBox.style.display = "none";
+    return;
+  } else if (val > 3000) {
+    if (errorDiv) {
+      errorDiv.innerHTML = "Số lượng tham gia tối đa là 3,000 TD Coin nhằm giảm lạm phát.";
+      errorDiv.style.display = "block";
+    }
+    calcBox.style.display = "none";
+    return;
+  } else {
+    if (errorDiv) errorDiv.style.display = "none";
+  }
+  
+  const rawWin = Math.floor(val * activeBetParams.odds);
+  const fee = Math.floor(rawWin * 0.05);
+  const possibleWin = rawWin - fee;
+  rewardText.innerText = possibleWin.toLocaleString() + " (đã trừ 5% phí tự động)";
+  calcBox.style.display = "block";
+}
+
+function submitFootballBet() {
+  if (!activeBetParams) return;
+  
+  const amountInput = document.getElementById("footballBetAmountInput");
+  const errorDiv = document.getElementById("footballBetDialogError");
+  if (!amountInput) return;
+  
+  const val = parseInt(amountInput.value);
+  if (isNaN(val) || val < 10) {
+    if (errorDiv) {
+      errorDiv.innerHTML = "Số lượng không hợp lệ. Tối thiểu 10 TD Coin.";
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+  if (val > 3000) {
+    if (errorDiv) {
+      errorDiv.innerHTML = "Chỉ được phép chọn tối đa 3,000 TD Coin nhằm giảm lạm phát.";
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+  
+  const currentPoints = Number(getCleanLocalStorage('cached_userPoints') || 0);
+  if (val > currentPoints) {
+    if (errorDiv) {
+      errorDiv.innerHTML = `Số dư của bạn không đủ để thực hiện (Có: ${currentPoints.toLocaleString()} Coin).`;
+      errorDiv.style.display = "block";
+    }
+    return;
+  }
+
+  // Cache values
+  const matchId = activeBetParams.matchId;
+  const desc = activeBetParams.desc;
+  let betOn = activeBetParams.betOn;
+  const odds = activeBetParams.odds;
+  
+  // If betOn is CS_OTHER, validate and format predicted score
+  const customHomeInput = document.getElementById("footballCustomHomeScore");
+  const customAwayInput = document.getElementById("footballCustomAwayScore");
+
+  if (betOn === "CS_OTHER") {
+    if (!customHomeInput || !customAwayInput) return;
+    const homeVal = customHomeInput.value.trim();
+    const awayVal = customAwayInput.value.trim();
+    if (homeVal === "" || awayVal === "") {
+      if (errorDiv) {
+        errorDiv.innerHTML = "Vui lòng điền đầy đủ tỷ số dự đoán.";
+        errorDiv.style.display = "block";
+      }
+      return;
+    }
+    const homeScore = parseInt(homeVal);
+    const awayScore = parseInt(awayVal);
+    if (isNaN(homeScore) || homeScore < 0 || isNaN(awayScore) || awayScore < 0) {
+      if (errorDiv) {
+        errorDiv.innerHTML = "Tỷ số nhập vào phải là số không âm.";
+        errorDiv.style.display = "block";
+      }
+      return;
+    }
+    
+    // Check if score is one of standard list: (1-0, 2-0, 2-1, 0-1, 0-2, 1-2, 1-1)
+    const isStandard = (
+      (homeScore === 1 && awayScore === 0) ||
+      (homeScore === 2 && awayScore === 0) ||
+      (homeScore === 2 && awayScore === 1) ||
+      (homeScore === 0 && awayScore === 1) ||
+      (homeScore === 0 && awayScore === 2) ||
+      (homeScore === 1 && awayScore === 2) ||
+      (homeScore === 1 && awayScore === 1)
+    );
+    if (isStandard) {
+      if (errorDiv) {
+        errorDiv.innerHTML = `Tỷ số ${homeScore}-${awayScore} đã có sẵn ở các ô cược tỷ số cụ thể phía trên, vui lòng chọn ô tương ứng!`;
+        errorDiv.style.display = "block";
+      }
+      return;
+    }
+    
+    betOn = "CS_OTHER:" + homeScore + "-" + awayScore;
+  }
+  
+  // Set Loading state on Bet Confirmation Dialog
+  const confirmBtn = document.getElementById("footballBetConfirmBtn");
+  const cancelBtn = confirmBtn ? confirmBtn.previousElementSibling : null;
+  const closeBtn = document.querySelector("#footballBetDialog .modern-modal-close-btn");
+  
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = "⏳ Đang gửi...";
+  }
+  if (amountInput) amountInput.disabled = true;
+  if (customHomeInput) customHomeInput.disabled = true;
+  if (customAwayInput) customAwayInput.disabled = true;
+  if (cancelBtn) cancelBtn.style.pointerEvents = "none";
+  if (closeBtn) closeBtn.style.pointerEvents = "none";
+
+  google.script.run
+    .withSuccessHandler((res) => {
+      hideFootballBetDialog(); // Will reset loading states automatically
+      if (res && res.success) {
+        showFootballMessageDialog("🏆 Dự đoán thành công!", res.message, "🎉");
+        if (res.newPoints !== undefined) {
+          const mainPtEl = document.getElementById('userPoint');
+          if (mainPtEl) mainPtEl.innerText = res.newPoints.toLocaleString();
+          localStorage.setItem('cached_userPoints', res.newPoints);
+          updateFootballCoinDisplay();
+        }
+        loadFootballMatches();
+      } else {
+        showFootballMessageDialog("⚠️ Dự đoán không thành công", res ? res.message : "Đã có lỗi bất ngờ xảy ra.", "❌");
+      }
+    })
+    .withFailureHandler((err) => {
+      hideFootballBetDialog(); // Will reset loading states automatically
+      showFootballMessageDialog("❌ Lỗi máy chủ", err.message, "⚠️");
+    })
+    .placeFootballBet(matchId, desc, betOn, odds, val);
+}
+
+function hideFootballBetDialog() {
+  const dialog = document.getElementById("footballBetDialog");
+  if (dialog) dialog.style.display = "none";
+  activeBetParams = null;
+
+  const confirmBtn = document.getElementById("footballBetConfirmBtn");
+  const amountInput = document.getElementById("footballBetAmountInput");
+  const customHomeInput = document.getElementById("footballCustomHomeScore");
+  const customAwayInput = document.getElementById("footballCustomAwayScore");
+  const cancelBtn = confirmBtn ? confirmBtn.previousElementSibling : null;
+  const closeBtn = document.querySelector("#footballBetDialog .modern-modal-close-btn");
+
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = "Xác nhận dự đoán";
+  }
+  if (amountInput) amountInput.disabled = false;
+  if (customHomeInput) customHomeInput.disabled = false;
+  if (customAwayInput) customAwayInput.disabled = false;
+  if (cancelBtn) cancelBtn.style.pointerEvents = "auto";
+  if (closeBtn) closeBtn.style.pointerEvents = "auto";
+}
+
+function showFootballMessageDialog(title, message, iconStr = "💡") {
+  const dialog = document.getElementById("footballMessageDialog");
+  const titleEl = document.getElementById("footballMessageDialogTitle");
+  const msgEl = document.getElementById("footballMessageDialogText");
+  const iconEl = document.getElementById("footballMessageDialogIcon");
+  
+  if (dialog) {
+    if (titleEl) titleEl.innerText = title;
+    if (msgEl) msgEl.innerHTML = message;
+    if (iconEl) iconEl.innerText = iconStr;
+    dialog.style.display = "flex";
+  }
+}
+
+function hideFootballMessageDialog() {
+  const dialog = document.getElementById("footballMessageDialog");
+  if (dialog) dialog.style.display = "none";
+}
+
+function loadMyFootballBets() {
+  const container = document.getElementById("footballPopupContentArea");
+  if(!container) return;
+  container.innerHTML = `<div style="text-align:center; padding:50px;"><div class="spinner" style="margin:0 auto;"></div><p style="margin-top:12px; color:#64748b; font-weight:500;">Đang tải lịch sử dự đoán của bạn...</p></div>`;
+  
+  google.script.run
+    .withSuccessHandler((bets) => {
+      if(!bets || bets.length === 0) {
+         container.innerHTML = `<div style="text-align:center; padding:50px; color:#64748b;"><div style="font-size:48px; margin-bottom:12px;">🏟️</div><p style="font-weight:600;">Bạn chưa tham gia dự đoán thể thao nào.</p></div>`;
+         return;
+      }
+      let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+      bets.forEach(b => {
+         let statusLabel = "";
+         let badgeBg = "#fef3c7";
+         let badgeColor = "#db6e42";
+         
+         if (b.status === "PENDING") {
+           statusLabel = "🕒 ĐANG CHỜ";
+           badgeBg = "#fef3c7";
+           badgeColor = "#db6e42";
+         } else if (b.status === "WIN") {
+           statusLabel = `🎉 CHÍNH XÁC (+${b.reward.toLocaleString()} Coin)`;
+           badgeBg = "#d1fae5";
+           badgeColor = "#065f46";
+         } else {
+           statusLabel = "❌ CHƯA CHÍNH XÁC";
+           badgeBg = "#fee2e2";
+           badgeColor = "#991b1b";
+         }
+         
+         html += `
+           <div class="football-match-card" style="display:flex; flex-direction:column; gap:8px;">
+             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:8px; margin-bottom:4px;" class="fb-history-header">
+               <span style="font-size:11px; color:#64748b; font-weight:600;">🕒 Dự đoán lúc: ${b.time}</span>
+               <span style="font-size:11px; font-weight:800; background:${badgeBg}; color:${badgeColor}; padding:4px 10px; border-radius:9999px; letter-spacing:0.02em;" class="fb-status-badge-${b.status.toLowerCase()}">${statusLabel}</span>
+             </div>
+             
+             <div style="font-weight:700; color:#1e293b; font-size:14px;" class="fb-history-desc">⚽ ${b.matchDesc}</div>
+             
+             <div style="font-size:13px; color:#475569;" class="fb-history-detail">
+               Chọn: <b style="color:#2563eb;">${b.betOn}</b> (Tỉ lệ: <b>x${b.odds}</b>) &bull; Coin tham gia: <b style="color:#059669;">${b.amount.toLocaleString()} 🪙</b>
+             </div>
+           </div>
+         `;
+      });
+      html += `</div>`;
+      container.innerHTML = html;
+      
+      const extraStylesHistory = document.getElementById("footballHistoryInternalStyles");
+      if (!extraStylesHistory) {
+        const styleEl = document.createElement("style");
+        styleEl.id = "footballHistoryInternalStyles";
+        styleEl.innerHTML = `
+          body.dark-mode .fb-history-header { border-color: rgba(255,255,255,0.05) !important; }
+          body.dark-mode .fb-history-desc { color: #f1f5f9 !important; }
+          body.dark-mode .fb-history-detail { color: #94a3b8 !important; }
+          body.dark-mode .fb-status-badge-pending { background: rgba(217, 119, 6, 0.15) !important; color: #fbbf24 !important; }
+          body.dark-mode .fb-status-badge-win { background: rgba(6, 95, 70, 0.15) !important; color: #34d399 !important; }
+          body.dark-mode .fb-status-badge-lose { background: rgba(153, 27, 27, 0.15) !important; color: #f87171 !important; }
+        `;
+        document.head.appendChild(styleEl);
+      }
+    })
+    .withFailureHandler((err) => {
+       container.innerHTML = `<div style="text-align:center; color:#ef4444; padding:40px; font-weight:bold;">⚠️ Không thể lấy danh sách lịch sử. Hãy thử lại.</div>`;
+    })
+    .getMyFootballBets();
+}
+
+window.adminTriggerSeasonReset = function() {
+    const ratio = document.getElementById("adminResetRetainRatio").value;
+    const maxRetain = document.getElementById("adminResetMaxRetain").value;
+    
+    if (!ratio || ratio < 0 || ratio > 100) {
+        showToast("Tỉ lệ giữ lại phải từ 0 đến 100", "error");
+        return;
+    }
+    
+    showConfirmModal(
+      'Reset Mùa Giải? 🔄',
+      `Bạn có chắc chắn muốn thực hiện RESET MÙA GIẢI? Học viên (STUDENT) sẽ bị khôi phục về 5,000 Coin. Các tài khoản Role khác sẽ giữ lại ${ratio}%, tối đa ${maxRetain} Coin. Lịch sử giao dịch Coin cũng sẽ được dọn sạch. Hành động này KHÔNG thể hoàn tác!`,
+      () => {
+        showNotification("Đang tiến hành Soft-Reset Mùa Giải... Vui lòng đợi đến khi hoàn tất.", true, false);
+        google.script.run
+            .withSuccessHandler((res) => {
+                hideNotification();
+                if (res && res.success) {
+                    showToast(`Thành công! Đã reset ${res.usersAffected} tài khoản. Tổng coin thu hồi: ${res.totalCoinsBurned}`, "success");
+                    loadAdminUsersData(); // reload bảng
+                } else {
+                    showToast(res ? res.message : "Thất bại, có lỗi xảy ra.", "error");
+                }
+            })
+            .withFailureHandler((err) => {
+                hideNotification();
+                showToast("Lỗi hệ thống: " + err.message, "error");
+            })
+            .adminPerformSeasonReset(Number(ratio), Number(maxRetain));
+      },
+      '🔄',
+      'Reset ngay'
+    );
+};
+
+window.adminCheckFootballResults = function() {
+    const btn = document.getElementById("btnCheckFootball");
+    const statusDiv = document.getElementById("footballAdminStatus");
+    
+    showConfirmModal(
+      'Kiểm tra kết quả ⚽',
+      'Hệ thống sẽ gọi API Football-Data để kiểm tra toàn bộ các lượt dự đoán đang chờ (PENDING). Bạn có muốn tiếp tục?',
+      () => {
+        btn.disabled = true;
+        btn.style.opacity = 0.5;
+        statusDiv.style.color = "#3b82f6";
+        statusDiv.innerHTML = "<span class='spinner-inline'></span> Đang xử lý...";
+        
+        google.script.run
+          .withSuccessHandler((res) => {
+              btn.disabled = false;
+              btn.style.opacity = 1;
+              if(res && res.success) {
+                  statusDiv.style.color = "#10b981";
+                  statusDiv.innerHTML = `✅ ${res.message}`;
+              } else {
+                  statusDiv.style.color = "#ef4444";
+                  statusDiv.innerHTML = `❌ Lỗi: ${res ? res.message : 'Chưa rõ nguyên nhân'}`;
+              }
+          })
+          .withFailureHandler((err) => {
+              btn.disabled = false;
+              btn.style.opacity = 1;
+              statusDiv.style.color = "#ef4444";
+              statusDiv.innerHTML = `❌ Lỗi kết nối: ${err.message}`;
+          })
+          .adminUpdateFootballBets();
+      },
+      '⚽',
+      'Tiếp tục'
+    );
+};
+
+window.adminCoinCharts = { inChart: null, outChart: null };
+
+window.loadAdminCoinFlowData = function() {
+    const listIn = document.getElementById("adminCoinFlowInList");
+    const listOut = document.getElementById("adminCoinFlowOutList");
+    const totalInLabel = document.getElementById("adminCoinFlowTotalIn");
+    const totalOutLabel = document.getElementById("adminCoinFlowTotalOut");
+    const historyBody = document.getElementById("adminCoinHistoryBody");
+
+    listIn.innerHTML = getAdminSpinnerHTML("Đang tải...", false, 1, 24);
+    listOut.innerHTML = getAdminSpinnerHTML("Đang tải...", false, 1, 24);
+    historyBody.innerHTML = getAdminSpinnerHTML("Đang tải lịch sử giao dịch...", true, 4);
+
+    google.script.run
+        .withSuccessHandler((res) => {
+            if (res && res.success) {
+                let { inFlow, outFlow, history } = res.data;
+                
+                let sumIn = 0;
+                let inLabels = [];
+                let inData = [];
+                let inBackgrounds = ['#10b981', '#34d399', '#6ee7b7', '#059669', '#047857', '#022c22', '#14b8a6', '#2dd4bf'];
+                
+                let htmlIn = `<table style="width:100%; border-collapse:collapse; margin-top:8px;">`;
+                inFlow.forEach(item => {
+                    sumIn += item.sum;
+                    inLabels.push(item.category);
+                    inData.push(item.sum);
+                    htmlIn += `<tr><td style="padding:4px 0;">${item.category}</td><td style="text-align:right; font-weight:bold;">+${item.sum.toLocaleString()}</td></tr>`;
+                });
+                htmlIn += `</table>`;
+                if(inFlow.length === 0) htmlIn = "Chưa có dữ liệu.";
+                listIn.innerHTML = htmlIn;
+                totalInLabel.innerText = "+" + sumIn.toLocaleString();
+                
+                let sumOut = 0;
+                let outLabels = [];
+                let outData = [];
+                let outBackgrounds = ['#ef4444', '#f87171', '#fca5a5', '#b91c1c', '#7f1d1d', '#450a0a', '#f43f5e', '#fb7185'];
+                
+                let htmlOut = `<table style="width:100%; border-collapse:collapse; margin-top:8px;">`;
+                outFlow.forEach(item => {
+                    sumOut += item.sum;
+                    outLabels.push(item.category);
+                    outData.push(item.sum);
+                    htmlOut += `<tr><td style="padding:4px 0;">${item.category}</td><td style="text-align:right; font-weight:bold;">-${item.sum.toLocaleString()}</td></tr>`;
+                });
+                htmlOut += `</table>`;
+                if(outFlow.length === 0) htmlOut = "Chưa có dữ liệu.";
+                listOut.innerHTML = htmlOut;
+                totalOutLabel.innerText = "-" + sumOut.toLocaleString();
+
+                // Generate Charts
+                if (window.adminCoinCharts.inChart) { window.adminCoinCharts.inChart.destroy(); }
+                if (window.adminCoinCharts.outChart) { window.adminCoinCharts.outChart.destroy(); }
+                
+                if(typeof Chart !== 'undefined') {
+                    const ctxIn = document.getElementById('adminCoinFlowChartIn');
+                    if (ctxIn && inLabels.length > 0) {
+                        window.adminCoinCharts.inChart = new Chart(ctxIn, {
+                            type: 'doughnut',
+                            data: {
+                                labels: inLabels,
+                                datasets: [{
+                                    data: inData,
+                                    backgroundColor: inBackgrounds,
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'right', labels: { boxWidth: 12 } }
+                                }
+                            }
+                        });
+                        listIn.style.display = 'none'; // ẩn list nếu có chart
+                    } else {
+                        listIn.style.display = 'block';
+                    }
+
+                    const ctxOut = document.getElementById('adminCoinFlowChartOut');
+                    if (ctxOut && outLabels.length > 0) {
+                        window.adminCoinCharts.outChart = new Chart(ctxOut, {
+                            type: 'doughnut',
+                            data: {
+                                labels: outLabels,
+                                datasets: [{
+                                    data: outData,
+                                    backgroundColor: outBackgrounds,
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'right', labels: { boxWidth: 12 } }
+                                }
+                            }
+                        });
+                        listOut.style.display = 'none'; // ẩn list nếu có chart
+                    } else {
+                        listOut.style.display = 'block';
+                    }
+                } else {
+                    listIn.style.display = 'block';
+                    listOut.style.display = 'block';
+                }
+
+
+                let htmlHistory = "";
+                if(history.length === 0) {
+                    htmlHistory = `<tr><td colspan="4" style="text-align:center; padding:20px;">Không có giao dịch nào</td></tr>`;
+                } else {
+                    history.forEach(item => {
+                        let color = item.amount > 0 ? '#10b981' : '#ef4444';
+                        let prefix = item.amount > 0 ? '+' : '';
+                        htmlHistory += `
+                          <tr>
+                            <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">${item.time}</td>
+                            <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${item.email}</td>
+                            <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: ${color};">${prefix}${item.amount.toLocaleString()}</td>
+                            <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">${item.source}</td>
+                          </tr>
+                        `;
+                    });
+                }
+                historyBody.innerHTML = htmlHistory;
+            } else {
+                listIn.innerHTML = "Lỗi";
+                listOut.innerHTML = "Lỗi";
+                historyBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#ef4444;">❌ Có lỗi xảy ra khi tải dữ liệu</td></tr>`;
+            }
+        })
+        .withFailureHandler((err) => {
+             listIn.innerHTML = "Lỗi hệ thống";
+             listOut.innerHTML = "Lỗi hệ thống";
+             historyBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#ef4444;">❌ Lỗi hệ thống: ${err.message}</td></tr>`;
+        })
+        .adminGetCoinFlowStats();
+};
+
+// --- CALENDAR STUDY PLAN LOGIC ---
+const TOPIC_COLORS = {
+  "te-bao": "#3b82f6",
+  "vi-sinh": "#8b5cf6",
+  "sl-thuc-vat": "#10b981",
+  "sl-dong-vat": "#f59e0b",
+  "di-truyen": "#ec4899",
+  "tien-hoa": "#6366f1",
+  "sinh-thai": "#14b8a6",
+  "khac": "#94a3b8"
+};
+
+const TOPIC_NAMES = {
+  "te-bao": "🔬 Tế Bào",
+  "vi-sinh": "🦠 Vi Sinh vật",
+  "sl-thuc-vat": "🌿 Sinh Lý Thực Vật",
+  "sl-dong-vat": "🦁 Sinh Lý Động Vật",
+  "di-truyen": "🧬 Di Truyền Học",
+  "tien-hoa": "🐒 Tiến Hóa - HTH - Tập Tính",
+  "sinh-thai": "🌍 Sinh Thái Học",
+  "khac": "📌 Khác"
+};
+
+let studyPlanData = {}; // { "YYYY-MM-DD": [ {id, text, topic, completed} ] }
+let planHistory = [];
+let planHistoryIndex = -1;
+
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
+
+function formatDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+let selectedDateStr = formatDate(new Date());
+
+// Custom Presets definition
+const CALENDAR_PRESETS = {
+  "emerald": {
+    name: "🌿 Ngọc Lục Bảo",
+    topics: {
+      "te-bao": "#3b82f6",
+      "vi-sinh": "#8b5cf6",
+      "sl-thuc-vat": "#10b981",
+      "sl-dong-vat": "#f59e0b",
+      "di-truyen": "#ec4899",
+      "tien-hoa": "#6366f1",
+      "sinh-thai": "#14b8a6",
+      "khac": "#94a3b8"
+    },
+    ui: {
+      headerBgStart: "#10b981",
+      headerBgEnd: "#059669",
+      headerText: "#ffffff",
+      todayBg: "#fef3c7",
+      todayText: "#db6e42",
+      selectedBorder: "#10b981",
+      selectedBg: "#ecfdf5",
+      cellBg: "#f8fafc",
+      cellText: "#334155",
+      gridBorder: "#f1f5f9"
+    }
+  },
+  "sunset": {
+    name: "🌅 Hoàng Hôn Ấm Áp",
+    topics: {
+      "te-bao": "#ef4444",
+      "vi-sinh": "#f97316",
+      "sl-thuc-vat": "#84cc16",
+      "sl-dong-vat": "#eab308",
+      "di-truyen": "#ec4899",
+      "tien-hoa": "#a855f7",
+      "sinh-thai": "#06b6d4",
+      "khac": "#64748b"
+    },
+    ui: {
+      headerBgStart: "#f97316",
+      headerBgEnd: "#e6774f",
+      headerText: "#ffffff",
+      todayBg: "#ffe4e6",
+      todayText: "#e11d48",
+      selectedBorder: "#e6774f",
+      selectedBg: "#fff7ed",
+      cellBg: "#fffbeb",
+      cellText: "#431407",
+      gridBorder: "#fde68a"
+    }
+  },
+  "ocean": {
+    name: "🌊 Đại Dương Xanh",
+    topics: {
+      "te-bao": "#2563eb",
+      "vi-sinh": "#0284c7",
+      "sl-thuc-vat": "#0d9488",
+      "sl-dong-vat": "#4f46e5",
+      "di-truyen": "#db2777",
+      "tien-hoa": "#7c3aed",
+      "sinh-thai": "#16a34a",
+      "khac": "#788896"
+    },
+    ui: {
+      headerBgStart: "#0284c7",
+      headerBgEnd: "#0369a1",
+      headerText: "#ffffff",
+      todayBg: "#e0f2fe",
+      todayText: "#0369a1",
+      selectedBorder: "#0284c7",
+      selectedBg: "#f0f9ff",
+      cellBg: "#f0fdf4",
+      cellText: "#0f172a",
+      gridBorder: "#bae6fd"
+    }
+  },
+  "midnight": {
+    name: "🌌 Vũ Trụ Huyền Bí",
+    topics: {
+      "te-bao": "#60a5fa",
+      "vi-sinh": "#c084fc",
+      "sl-thuc-vat": "#34d399",
+      "sl-dong-vat": "#fbbf24",
+      "di-truyen": "#f472b6",
+      "tien-hoa": "#818cf8",
+      "sinh-thai": "#2dd4bf",
+      "khac": "#94a3b8"
+    },
+    ui: {
+      headerBgStart: "#1e293b",
+      headerBgEnd: "#0f172a",
+      headerText: "#cbd5e1",
+      todayBg: "rgba(251, 191, 36, 0.15)",
+      todayText: "#fbbf24",
+      selectedBorder: "#60a5fa",
+      selectedBg: "rgba(96, 165, 250, 0.1)",
+      cellBg: "#1e293b",
+      cellText: "#f1f5f9",
+      gridBorder: "#334155"
+    }
+  },
+  "cherry": {
+    name: "🌸 Anh Đào Ngọt Ngào",
+    topics: {
+      "te-bao": "#f472b6",
+      "vi-sinh": "#db2777",
+      "sl-thuc-vat": "#ec4899",
+      "sl-dong-vat": "#fbbf24",
+      "di-truyen": "#f43f5e",
+      "tien-hoa": "#a855f7",
+      "sinh-thai": "#10b981",
+      "khac": "#64748b"
+    },
+    ui: {
+      headerBgStart: "#ec4899",
+      headerBgEnd: "#be185d",
+      headerText: "#ffffff",
+      todayBg: "#fff1f2",
+      todayText: "#f43f5e",
+      selectedBorder: "#ec4899",
+      selectedBg: "#fff5f7",
+      cellBg: "#fffafb",
+      cellText: "#4c0519",
+      gridBorder: "#fecdd3"
+    }
+  }
+};
+
+function getCustomColors() {
+  const defaultColors = {
+    topics: {
+      "te-bao": "#3b82f6",
+      "vi-sinh": "#8b5cf6",
+      "sl-thuc-vat": "#10b981",
+      "sl-dong-vat": "#f59e0b",
+      "di-truyen": "#ec4899",
+      "tien-hoa": "#6366f1",
+      "sinh-thai": "#14b8a6",
+      "khac": "#94a3b8"
+    },
+    ui: {
+      headerBgStart: "#10b981",
+      headerBgEnd: "#059669",
+      headerText: "#ffffff",
+      todayBg: "#fef3c7",
+      todayText: "#db6e42",
+      selectedBorder: "#10b981",
+      selectedBg: "#ecfdf5",
+      cellBg: "#f8fafc",
+      cellText: "#334155",
+      gridBorder: "#f1f5f9"
+    }
+  };
+
+  try {
+    const saved = getCleanLocalStorage("hsgqg_calendar_colors");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const topics = Object.assign({}, defaultColors.topics, parsed.topics);
+      const ui = Object.assign({}, defaultColors.ui, parsed.ui);
+      return { topics, ui };
+    }
+  } catch (e) {
+    console.error("Error reading custom colors:", e);
+  }
+  return defaultColors;
+}
+
+function getTopicColor(topic) {
+  const colors = getCustomColors();
+  return colors.topics[topic] || "#94a3b8";
+}
+
+function saveCustomColors(colors) {
+  localStorage.setItem("hsgqg_calendar_colors", JSON.stringify(colors));
+  applyCalendarCustomColors();
+  renderCalendar();
+  if (typeof renderDailyTasks === "function") renderDailyTasks();
+  if (typeof renderDashboardStudyPlan === "function") renderDashboardStudyPlan();
+}
+
+function openCalendarPersonalizeModal() {
+  const modal = document.getElementById("calendarPersonalizeModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  
+  renderCalendarPresets();
+  
+  const colors = getCustomColors();
+  
+  Object.keys(colors.topics).forEach(topic => {
+    const input = document.getElementById(`col_topic_${topic}`);
+    if (input) input.value = colors.topics[topic];
+  });
+  
+  Object.keys(colors.ui).forEach(uiKey => {
+    const input = document.getElementById(`col_ui_${uiKey}`);
+    if (input) {
+      let val = colors.ui[uiKey];
+      if (val.startsWith("rgba")) {
+        input.value = "#10b981";
+      } else {
+        input.value = val;
+      }
+    }
+  });
+}
+
+function closeCalendarPersonalizeModal() {
+  const modal = document.getElementById("calendarPersonalizeModal");
+  if (modal) modal.style.display = "none";
+}
+
+function renderCalendarPresets() {
+  const container = document.getElementById("calendarPresetContainer");
+  if (!container) return;
+  container.innerHTML = "";
+  
+  Object.keys(CALENDAR_PRESETS).forEach(presetKey => {
+    const p = CALENDAR_PRESETS[presetKey];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.innerText = p.name;
+    btn.style.cssText = "font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #334155; font-weight: 600; cursor: pointer; transition: all 0.2s;";
+    btn.onmouseover = () => { btn.style.borderColor = p.ui.headerBgStart; btn.style.background = p.ui.selectedBg; };
+    btn.onmouseout = () => { btn.style.borderColor = "#cbd5e1"; btn.style.background = "white"; };
+    btn.onclick = () => {
+      applyPresetToInputs(p);
+      showToast(`Đã chọn preset "${p.name}". Ấn "Lưu thay đổi" để áp dụng!`, "success", 2000);
+    };
+    container.appendChild(btn);
+  });
+}
+
+function applyPresetToInputs(p) {
+  Object.keys(p.topics).forEach(topic => {
+    const input = document.getElementById(`col_topic_${topic}`);
+    if (input) input.value = p.topics[topic];
+  });
+  
+  Object.keys(p.ui).forEach(uiKey => {
+    const input = document.getElementById(`col_ui_${uiKey}`);
+    if (input) {
+      let val = p.ui[uiKey];
+      if (val.startsWith("rgba")) {
+        input.value = "#10b981";
+      } else {
+        input.value = val;
+      }
+    }
+  });
+}
+
+function saveCalendarPersonalizedColors() {
+  const colors = {
+    topics: {},
+    ui: {}
+  };
+  
+  const current = getCustomColors();
+  colors.topics = Object.assign({}, current.topics);
+  colors.ui = Object.assign({}, current.ui);
+  
+  const topicsList = ["te-bao", "vi-sinh", "sl-thuc-vat", "sl-dong-vat", "di-truyen", "tien-hoa", "sinh-thai", "khac"];
+  topicsList.forEach(topic => {
+    const input = document.getElementById(`col_topic_${topic}`);
+    if (input) colors.topics[topic] = input.value;
+  });
+  
+  const uiList = ["headerBgStart", "headerBgEnd", "headerText", "todayBg", "todayText", "selectedBorder", "selectedBg", "cellBg", "cellText", "gridBorder"];
+  uiList.forEach(uiKey => {
+    const input = document.getElementById(`col_ui_${uiKey}`);
+    if (input) colors.ui[uiKey] = input.value;
+  });
+  
+  saveCustomColors(colors);
+  closeCalendarPersonalizeModal();
+  showToast("Đã lưu và áp dụng bảng màu cá nhân của bạn! 🎉", "success");
+}
+
+function resetCalendarColorsToDefault() {
+  localStorage.removeItem("hsgqg_calendar_colors");
+  applyCalendarCustomColors();
+  renderCalendar();
+  if (typeof renderDailyTasks === "function") renderDailyTasks();
+  closeCalendarPersonalizeModal();
+  showToast("Đã khôi phục bảng màu lịch về mặc định. 🌿", "success");
+}
+
+function applyCalendarCustomColors() {
+  const colors = getCustomColors();
+  const { ui } = colors;
+  
+  const headerBlock = document.getElementById("calendarHeaderBlock");
+  if (headerBlock) {
+    headerBlock.style.background = `linear-gradient(135deg, ${ui.headerBgStart}, ${ui.headerBgEnd})`;
+    headerBlock.style.color = ui.headerText;
+  }
+}
+
+function initStudyPlan() {
+  initDailyRoutines();
+  const cached = getCleanLocalStorage("hsgqg_calendar_plan");
+  if (cached) {
+    studyPlanData = JSON.parse(cached);
+  } else {
+    // Generate sample data based on current date
+    studyPlanData = {};
+    const today = new Date();
+    studyPlanData[formatDate(today)] = [
+      { id: Date.now().toString() + "1", text: "Đọc Campbell: Tế bào học (Chương 6-12) - Ví dụ", topic: "te-bao", completed: false },
+      { id: Date.now().toString() + "2", text: "Làm bài tập trắc nghiệm Tế Bào - Ví dụ", topic: "te-bao", completed: true }
+    ];
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    studyPlanData[formatDate(tomorrow)] = [
+      { id: Date.now().toString() + "3", text: "Đọc Campbell: Virus & Vi khuẩn (Chương 27, 28) - Ví dụ", topic: "vi-sinh", completed: false }
+    ];
+  }
+  
+  saveStateToHistory(studyPlanData);
+  applyCalendarCustomColors();
+  renderCalendar();
+  renderDailyTasks();
+  updateOverallProgress();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+  if (typeof loadUserClassSchedules === "function") {
+    loadUserClassSchedules();
+  }
+  // Reminders will be checked automatically after the main app loader finishes
+}
+
+function saveStateToHistory(data) {
+  // If we are not at the end of history, truncate the future
+  if (planHistoryIndex < planHistory.length - 1) {
+    planHistory = planHistory.slice(0, planHistoryIndex + 1);
+  }
+  planHistory.push(JSON.parse(JSON.stringify(data)));
+  if (planHistory.length > 20) { // Keep last 20 steps
+    planHistory.shift();
+  } else {
+    planHistoryIndex++;
+  }
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  const btnUndo = document.getElementById("btnUndo");
+  const btnRedo = document.getElementById("btnRedo");
+  if (btnUndo) btnUndo.disabled = planHistoryIndex <= 0;
+  if (btnRedo) btnRedo.disabled = planHistoryIndex >= planHistory.length - 1;
+}
+
+function undoStudyPlan() {
+  if (planHistoryIndex > 0) {
+    planHistoryIndex--;
+    studyPlanData = JSON.parse(JSON.stringify(planHistory[planHistoryIndex]));
+    persistData();
+    renderCalendar();
+    renderDailyTasks();
+    updateOverallProgress();
+    updateUndoRedoButtons();
+  }
+}
+
+function redoStudyPlan() {
+  if (planHistoryIndex < planHistory.length - 1) {
+    planHistoryIndex++;
+    studyPlanData = JSON.parse(JSON.stringify(planHistory[planHistoryIndex]));
+    persistData();
+    renderCalendar();
+    renderDailyTasks();
+    updateOverallProgress();
+    updateUndoRedoButtons();
+  }
+}
+
+function persistData() {
+  localStorage.setItem("hsgqg_calendar_plan", JSON.stringify(studyPlanData));
+}
+
+function resetStudyPlan() {
+  showConfirmModal(
+    "Xác nhận Reset", 
+    "Bạn có chắc chắn muốn reset toàn bộ lịch trình? Mọi nhiệm vụ sẽ bị xóa trắng.", 
+    () => {
+      studyPlanData = {};
+      saveStateToHistory(studyPlanData);
+      persistData();
+      renderCalendar();
+      renderDailyTasks();
+      updateOverallProgress();
+      showToast("Đã reset lịch trình.", "success");
+    },
+    '🗑️',
+    'Reset'
+  );
+}
+
+function changeMonth(delta) {
+  currentMonth += delta;
+  if (currentMonth < 0) {
+    currentMonth = 11;
+    currentYear--;
+  } else if (currentMonth > 11) {
+    currentMonth = 0;
+    currentYear++;
+  }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const monthNames = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
+  const calendarMonthYear = document.getElementById("calendarMonthYear");
+  if (calendarMonthYear) calendarMonthYear.innerText = `${monthNames[currentMonth]}, ${currentYear}`;
+
+  const grid = document.getElementById("calendarGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+  // Render previous month days
+  for (let i = 0; i < firstDay; i++) {
+    const d = daysInPrevMonth - firstDay + i + 1;
+    const dateStr = formatDate(new Date(currentMonth === 0 ? currentYear - 1 : currentYear, currentMonth === 0 ? 11 : currentMonth - 1, d));
+    grid.appendChild(createDayElement(d, true, dateStr));
+  }
+
+  // Render current month days
+  for (let i = 1; i <= daysInMonth; i++) {
+    const dateStr = formatDate(new Date(currentYear, currentMonth, i));
+    grid.appendChild(createDayElement(i, false, dateStr));
+  }
+
+  // Render next month days to complete grid
+  const totalCells = grid.children.length;
+  const remaining = 42 - totalCells; // 6 rows of 7
+  for (let i = 1; i <= remaining; i++) {
+    const dateStr = formatDate(new Date(currentMonth === 11 ? currentYear + 1 : currentYear, currentMonth === 11 ? 0 : currentMonth + 1, i));
+    grid.appendChild(createDayElement(i, true, dateStr));
+  }
+}
+
+function createDayElement(dayNum, isOtherMonth, dateStr) {
+  const isToday = dateStr === formatDate(new Date());
+  const isSelected = dateStr === selectedDateStr;
+  
+  const colors = getCustomColors();
+  const { ui } = colors;
+
+  const el = document.createElement("div");
+  el.className = "calendar-day" + (isOtherMonth ? " other-month" : "") + (isSelected ? " selected" : "") + (isToday ? " today" : "");
+  
+  // Apply Custom Theme Styles Inline (to override stylesheets dynamically)
+  if (!isOtherMonth) {
+    el.style.background = ui.cellBg;
+    el.style.borderColor = ui.gridBorder;
+    
+    if (isToday) {
+      el.style.background = ui.todayBg;
+      el.style.borderColor = ui.todayText;
+    }
+    
+    if (isSelected) {
+      el.style.borderColor = ui.selectedBorder;
+      el.style.background = ui.selectedBg;
+      el.style.boxShadow = `inset 0 0 0 1px ${ui.selectedBorder}`;
+    }
+  }
+
+  el.onclick = () => {
+    selectedDateStr = dateStr;
+    // If clicking other month, navigate to it
+    const dateObj = new Date(dateStr);
+    if (dateObj.getMonth() !== currentMonth) {
+      currentMonth = dateObj.getMonth();
+      currentYear = dateObj.getFullYear();
+    }
+    renderCalendar();
+    renderDailyTasks();
+  };
+
+  if (dayNum === 1) {
+    const monthIndex = new Date(dateStr).getMonth();
+    const monthNames = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
+    const monthHeader = document.createElement("div");
+    monthHeader.className = "month-break-header";
+    monthHeader.innerText = monthNames[monthIndex];
+    el.appendChild(monthHeader);
+  }
+
+  const numEl = document.createElement("div");
+  numEl.className = "calendar-day-num";
+  numEl.innerText = dayNum;
+  
+  // Custom number styling
+  if (!isOtherMonth) {
+    numEl.style.color = ui.cellText;
+    if (isToday) {
+      numEl.style.color = ui.todayText;
+      numEl.style.fontWeight = "700";
+    }
+  }
+  el.appendChild(numEl);
+
+  const indicatorsEl = document.createElement("div");
+  indicatorsEl.className = "calendar-day-indicators";
+  
+  if (studyPlanData[dateStr]) {
+    studyPlanData[dateStr].forEach(task => {
+      const dot = document.createElement("div");
+      dot.className = "indicator-dot " + (task.completed ? "completed" : "pending");
+      if (!task.completed) {
+        dot.style.background = getTopicColor(task.topic);
+      }
+      indicatorsEl.appendChild(dot);
+    });
+  }
+  el.appendChild(indicatorsEl);
+
+  if (typeof getClassSchedulesForDate === "function") {
+    const classesOnDay = getClassSchedulesForDate(dateStr);
+    if (classesOnDay && classesOnDay.length > 0) {
+      const classBadgeContainer = document.createElement("div");
+      classBadgeContainer.style.display = "flex";
+      classBadgeContainer.style.flexDirection = "column";
+      classBadgeContainer.style.gap = "2px";
+      classBadgeContainer.style.marginTop = "auto";
+      classBadgeContainer.style.width = "100%";
+      classBadgeContainer.style.overflow = "hidden";
+      
+      classesOnDay.forEach(cls => {
+        const pill = document.createElement("div");
+        pill.style.background = cls.color || "#3b82f6";
+        pill.style.color = "white";
+        pill.style.fontSize = "0.65rem";
+        pill.style.padding = "1px 4px";
+        pill.style.borderRadius = "4px";
+        pill.style.whiteSpace = "nowrap";
+        pill.style.overflow = "hidden";
+        pill.style.textOverflow = "ellipsis";
+        pill.style.fontWeight = "700";
+        pill.style.textAlign = "center";
+        pill.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
+        pill.style.maxWidth = "100%";
+        pill.style.boxSizing = "border-box";
+        pill.style.whiteSpace = "nowrap";
+        pill.style.overflow = "hidden";
+        pill.style.textOverflow = "ellipsis";
+        pill.innerText = cls.name;
+        pill.title = `${cls.code} (${cls.time})`;
+        classBadgeContainer.appendChild(pill);
+      });
+      el.appendChild(classBadgeContainer);
+    }
+  }
+
+  return el;
+}
+
+// Reminder Logic
+function checkStudyReminders() {
+  const reminderEnabled = getCleanLocalStorage("tds_reminders_enabled") !== "false";
+  if (!reminderEnabled) return;
+
+  const todayStr = formatDate(new Date());
+  let pendingToday = 0;
+  let pendingPast = 0;
+
+  if (typeof studyPlanData !== "object" || !studyPlanData) return;
+
+  Object.keys(studyPlanData).forEach(dateStr => {
+    const tasks = studyPlanData[dateStr];
+    tasks.forEach(task => {
+      if (!task.completed) {
+        if (dateStr === todayStr) pendingToday++;
+        else if (dateStr < todayStr) pendingPast++;
+      }
+    });
+  });
+
+  const soundEnabled = getCleanLocalStorage("tds_reminder_sound") !== "false";
+
+  if (pendingPast > 0) {
+    if (soundEnabled) playReminderSound();
+    showToast(`Bạn có ${pendingPast} nhiệm vụ cũ chưa hoàn thành. Hãy sắp xếp thời gian nhé!`, "warning", 8000, {
+      text: "Xem lịch trình",
+      onclick: "switchView('studyPlan')"
+    });
+  } else if (pendingToday > 0) {
+    if (soundEnabled) playReminderSound();
+    showToast(`Hôm nay bạn có ${pendingToday} nhiệm vụ cần hoàn thành. Cố lên nhé!`, "info", 8000, {
+      text: "Xem lịch trình",
+      onclick: "switchView('studyPlan')"
+    });
+  }
+}
+
+// Custom Notification sound and configurations
+function showNotificationSettingsModal() {
+  const modal = document.getElementById("notificationSettingsModal");
+  if (!modal) return;
+  
+  const reminderEnabled = getCleanLocalStorage("tds_reminders_enabled") !== "false";
+  const soundEnabled = getCleanLocalStorage("tds_reminder_sound") !== "false";
+  const intervalVal = getCleanLocalStorage("tds_reminder_interval") || "120";
+  
+  const chkReminder = document.getElementById("chkNotificationReminder");
+  const chkSound = document.getElementById("chkNotificationSound");
+  const selInterval = document.getElementById("selNotificationInterval");
+  
+  if (chkReminder) chkReminder.checked = reminderEnabled;
+  if (chkSound) chkSound.checked = soundEnabled;
+  if (selInterval) selInterval.value = intervalVal;
+  
+  modal.style.display = "flex";
+}
+
+function closeNotificationSettingsModal() {
+  const modal = document.getElementById("notificationSettingsModal");
+  if (modal) modal.style.display = "none";
+}
+
+function saveNotificationSettings() {
+  const chkReminder = document.getElementById("chkNotificationReminder");
+  const chkSound = document.getElementById("chkNotificationSound");
+  const selInterval = document.getElementById("selNotificationInterval");
+  
+  if (chkReminder) {
+    localStorage.setItem("tds_reminders_enabled", chkReminder.checked ? "true" : "false");
+  }
+  if (chkSound) {
+    localStorage.setItem("tds_reminder_sound", chkSound.checked ? "true" : "false");
+  }
+  if (selInterval) {
+    localStorage.setItem("tds_reminder_interval", selInterval.value);
+  }
+  
+  setupStudyReminderInterval();
+}
+
+function testNotificationChime() {
+  playReminderSound();
+  showToast("🔊 Chime bíp kép đã được phát để thử nghiệm thành công!", "success", 3000);
+}
+
+function playReminderSound() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Play double chime: note 1 then note 2
+    const playChime = (freq, startTime, duration) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.08, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    
+    const now = audioCtx.currentTime;
+    playChime(523.25, now, 0.4);      // C5
+    playChime(659.25, now + 0.12, 0.6); // E5
+  } catch (e) {
+    console.log("Audio Context not allowed or initialized: ", e);
+  }
+}
+
+let studyReminderIntervalId = null;
+
+function setupStudyReminderInterval() {
+  if (studyReminderIntervalId) {
+    clearInterval(studyReminderIntervalId);
+    studyReminderIntervalId = null;
+  }
+  
+  const reminderEnabled = getCleanLocalStorage("tds_reminders_enabled") !== "false";
+  if (!reminderEnabled) return;
+  
+  // Interval value in minutes (default is 120 minutes = 2 hours)
+  const intervalVal = parseInt(getCleanLocalStorage("tds_reminder_interval") || "120", 10);
+  if (intervalVal > 0) {
+    const ms = intervalVal * 60 * 1000;
+    studyReminderIntervalId = setInterval(checkStudyReminders, ms);
+  }
+}
+
+// Initial setup of continuous reminders
+setupStudyReminderInterval();
+
+// Dashboard study plan rendering functions
+function toggleTodayDashboardRoutine(id) {
+  const todayStr = formatDate(new Date());
+  const compKey = todayStr + "_" + id;
+  routineCompletions[compKey] = !routineCompletions[compKey];
+  localStorage.setItem("tds_daily_routine_completions", JSON.stringify(routineCompletions));
+  
+  if (typeof renderDailyRoutines === "function") {
+    renderDailyRoutines();
+  }
+  renderDashboardStudyPlan();
+}
+
+function renderDashboardStudyPlan() {
+  const container = document.getElementById("todayStudyPlanDashboard");
+  if (container) {
+    const todayStr = formatDate(new Date());
+    const tasks = (typeof studyPlanData === "object" && studyPlanData) ? (studyPlanData[todayStr] || []) : [];
+    const classesOnDay = (typeof getClassSchedulesForDate === "function") ? getClassSchedulesForDate(todayStr) : [];
+    
+    // Get active routines for today
+    const todayObj = new Date();
+    const todayDayOfWeek = todayObj.getDay();
+    const todayIsWeekend = (todayDayOfWeek === 0 || todayDayOfWeek === 6);
+    
+    const todayRoutines = dailyRoutines.filter(r => {
+      if (r.repeat === "daily") return true;
+      if (r.repeat === "weekdays" && !todayIsWeekend) return true;
+      if (r.repeat === "weekends" && todayIsWeekend) return true;
+      if (r.repeat === "date" && r.specificDate === todayStr) return true;
+      return false;
+    });
+    
+    // Sort chronologically
+    todayRoutines.sort((a, b) => a.start.localeCompare(b.start));
+    
+    if (tasks.length === 0 && classesOnDay.length === 0 && todayRoutines.length === 0) {
+      container.innerHTML = `
+        <div class="dashboard-schedule-empty">
+          <div class="schedule-empty-icon-wrap">
+            <span class="schedule-empty-icon">📅</span>
+            <span class="schedule-empty-sparkle">✨</span>
+          </div>
+          <h4 class="schedule-empty-title">Hôm nay trống lịch học</h4>
+          <p class="schedule-empty-sub">Tận hưởng ngày thảnh thơi hoặc lên lịch ôn tập mới nhé!</p>
+          <button onclick="switchView('studyPlan')" class="schedule-empty-action-btn">
+            <span>+ Lên lịch học</span>
+          </button>
+        </div>
+      `;
+    } else {
+      let html = "";
+      
+      // Render Class Schedules first
+      if (classesOnDay && classesOnDay.length > 0) {
+        html += `<div class="class-schedule-header" style="margin-top: 2px; margin-bottom: 6px;">📅 LỚP HỌC TRỰC TUYẾN</div>`;
+        classesOnDay.forEach(cls => {
+          const absoluteLink = ensureAbsoluteUrl(cls.link);
+          const joinBtnHtml = cls.link ? `
+            <a href="${absoluteLink}" target="_blank" style="background: ${cls.color}; color: white; border: none; border-radius: 6px; padding: 4px 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px ${cls.color}25; flex-shrink: 0;">
+              🎥 Vào Lớp
+            </a>
+          ` : `
+            <span style="font-size: 0.7rem; color: #94a3b8; flex-shrink: 0;">Chưa có link</span>
+          `;
+          
+          html += `
+            <div class="class-schedule-item" style="border-left: 3.5px solid ${cls.color}; margin-bottom: 6px; padding: 8px 10px; border-radius: 10px;">
+              <div style="flex: 1; min-width: 0;">
+                <div class="class-schedule-name" style="font-size: 0.8rem; font-weight: 700;">${cls.name}</div>
+                <div class="class-schedule-time" style="font-size: 0.7rem; margin-top: 2px; color: #64748b;">🕒 ${cls.time}</div>
+              </div>
+              <div style="margin-left: 6px; display: flex; align-items: center;">
+                ${joinBtnHtml}
+              </div>
+            </div>
+          `;
+        });
+      }
+      
+      // Render Daily Routine next
+      if (todayRoutines && todayRoutines.length > 0) {
+        html += `<div class="class-schedule-header" style="margin-top: 10px; margin-bottom: 6px;">⏰ THỜI GIAN BIỂU</div>`;
+        todayRoutines.forEach(rt => {
+          const compKey = todayStr + "_" + rt.id;
+          const isCompleted = !!routineCompletions[compKey];
+          
+          html += `
+            <div class="class-schedule-item" 
+                 onclick="toggleTodayDashboardRoutine('${rt.id}'); event.stopPropagation();"
+                 title="Nhấn để đổi trạng thái hoàn thành"
+                 style="border-left: 3.5px solid ${rt.color}; margin-bottom: 6px; padding: 8px 10px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; opacity: ${isCompleted ? '0.65' : '1'};">
+              <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" ${isCompleted ? 'checked' : ''} style="cursor: pointer; accent-color: #10b981; pointer-events: none;" readonly>
+                <div style="min-width: 0;">
+                  <div class="class-schedule-name" style="font-size: 0.8rem; font-weight: 700; text-decoration: ${isCompleted ? 'line-through' : 'none'};">${rt.activity}</div>
+                  <div class="class-schedule-time" style="font-size: 0.7rem; margin-top: 2px; color: #64748b;">🕒 ${rt.start} - ${rt.end}</div>
+                </div>
+              </div>
+              <div>
+                 <span style="font-size: 0.68rem; color: ${rt.color}; font-weight: 750; background: ${rt.color}15; padding: 2px 6px; border-radius: 6px;">Lịch</span>
+              </div>
+            </div>
+          `;
+        });
+      }
+      
+      // Render Personal Tasks next
+      if (tasks && tasks.length > 0) {
+        if ((classesOnDay && classesOnDay.length > 0) || (todayRoutines && todayRoutines.length > 0)) {
+          html += `<div class="class-schedule-header" style="margin-top: 10px; margin-bottom: 6px;">📝 NHIỆM VỤ CÁ NHÂN</div>`;
+        }
+        
+        tasks.forEach((task, idx) => {
+          const isCompleted = task.completed;
+          const escText = task.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const dotColor = isCompleted ? "#10b981" : (getTopicColor(task.topic) || "#cbd5e1");
+          
+          html += `
+            <div class="dashboard-task-item ${isCompleted ? 'completed' : ''}" 
+                 onclick="toggleDashboardTask('${todayStr}', ${idx})"
+                 title="Nhấn để đổi trạng thái"
+                 style="margin-bottom: 6px; border-radius: 10px; padding: 8px 10px;">
+              <div style="width: 15px; height: 15px; border-radius: 50%; border: 2px solid ${dotColor}; background: ${isCompleted ? '#10b981' : 'transparent'}; margin-top: 1px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                ${isCompleted ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+              </div>
+              <div class="task-text" style="font-size: 0.8rem; font-weight: 550;">${escText}</div>
+            </div>
+          `;
+        });
+      }
+      
+      container.innerHTML = html;
+    }
+  }
+
+  // Also update mini study drawer and badge live!
+  if (typeof updateMiniStudyBadge === "function") {
+    updateMiniStudyBadge();
+  }
+  if (typeof renderMiniStudyDrawer === "function") {
+    renderMiniStudyDrawer();
+  }
+}
+
+function toggleDashboardTask(dateStr, idx) {
+  if (typeof toggleTaskStatus === "function") {
+    toggleTaskStatus(dateStr, idx);
+  }
+}
+
+function renderDailyTasks() {
+  const dateObj = new Date(selectedDateStr);
+  const title = `Công việc ngày ${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+  const selectedDateTitle = document.getElementById("selectedDateTitle");
+  if (selectedDateTitle) selectedDateTitle.innerText = title;
+
+  const list = document.getElementById("dailyTaskList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const isDark = document.body.classList.contains("dark-mode");
+
+  // Render Class Schedules first
+  const classesOnDay = (typeof getClassSchedulesForDate === "function") ? getClassSchedulesForDate(selectedDateStr) : [];
+  if (classesOnDay && classesOnDay.length > 0) {
+    const classesHeader = document.createElement("div");
+    classesHeader.className = "class-schedule-header";
+    classesHeader.innerText = "📅 LỚP HỌC TRỰC TUYẾN";
+    list.appendChild(classesHeader);
+    
+    classesOnDay.forEach(cls => {
+      const classItem = document.createElement("div");
+      classItem.className = "class-schedule-item";
+      classItem.style.borderLeft = `4px solid ${cls.color}`;
+      
+      const infoCol = document.createElement("div");
+      infoCol.style.flex = "1";
+      infoCol.style.minWidth = "0";
+      
+      const className = document.createElement("div");
+      className.className = "class-schedule-name";
+      className.innerText = cls.name;
+      
+      const classTime = document.createElement("div");
+      classTime.className = "class-schedule-time";
+      classTime.innerHTML = `🕒 ${cls.time}`;
+      
+      infoCol.appendChild(className);
+      infoCol.appendChild(classTime);
+      
+      const actionCol = document.createElement("div");
+      if (cls.link) {
+        const joinBtn = document.createElement("a");
+        joinBtn.href = ensureAbsoluteUrl(cls.link);
+        joinBtn.target = "_blank";
+        joinBtn.style.background = cls.color;
+        joinBtn.style.color = "white";
+        joinBtn.style.border = "none";
+        joinBtn.style.borderRadius = "6px";
+        joinBtn.style.padding = "5px 10px";
+        joinBtn.style.fontSize = "0.75rem";
+        joinBtn.style.fontWeight = "700";
+        joinBtn.style.cursor = "pointer";
+        joinBtn.style.textDecoration = "none";
+        joinBtn.style.display = "inline-flex";
+        joinBtn.style.alignItems = "center";
+        joinBtn.style.gap = "4px";
+        joinBtn.style.boxShadow = `0 2px 6px ${cls.color}20`;
+        joinBtn.innerHTML = `🎥 Vào Lớp`;
+        actionCol.appendChild(joinBtn);
+      } else {
+        const noLink = document.createElement("span");
+        noLink.style.fontSize = "0.75rem";
+        noLink.style.color = "#94a3b8";
+        noLink.innerText = "Chưa có link";
+        actionCol.appendChild(noLink);
+      }
+      
+      classItem.appendChild(infoCol);
+      classItem.appendChild(actionCol);
+      list.appendChild(classItem);
+    });
+
+    const tasksHeader = document.createElement("div");
+    tasksHeader.className = "class-schedule-header";
+    tasksHeader.style.marginTop = "16px";
+    tasksHeader.innerText = "📝 NHIỆM VỤ CÁ NHÂN";
+    list.appendChild(tasksHeader);
+  }
+
+  const tasks = studyPlanData[selectedDateStr] || [];
+  const todayStr = formatDate(new Date());
+  const isSelectedToday = (selectedDateStr === todayStr);
+  
+  if (tasks.length === 0) {
+    if (!isSelectedToday || !window.unsubmittedHomeworks || window.unsubmittedHomeworks.length === 0) {
+      const noTasksDiv = document.createElement("div");
+      noTasksDiv.style.textAlign = "center";
+      noTasksDiv.style.color = "#94a3b8";
+      noTasksDiv.style.padding = "20px";
+      noTasksDiv.style.fontSize = "0.85rem";
+      noTasksDiv.style.fontStyle = "italic";
+      noTasksDiv.innerHTML = "Không có nhiệm vụ cá nhân nào.<br>Thêm nhiệm vụ bên dưới!";
+      list.appendChild(noTasksDiv);
+    }
+  } else {
+    tasks.forEach((task, idx) => {
+      const item = document.createElement("div");
+      item.className = "daily-task-item" + (task.completed ? " completed" : "");
+      
+      let linkHtml = '';
+      if (task.link) {
+        if (task.link.startsWith('{')) {
+          try {
+            const fileObj = JSON.parse(task.link);
+            const fileStr = task.link.replace(/"/g, '&quot;');
+            linkHtml = `<span onclick="navigateToResource(${fileStr})" class="task-link-btn" title="Mở tài liệu: ${fileObj.title || ''}" style="cursor: pointer; display: inline-block; margin-left: 8px; font-size: 0.9em; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; color: #0284c7;">📚 ${fileObj.title || 'Mở tài liệu'}</span>`;
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          // Validate link
+          let href = task.link;
+          if (!href.startsWith('http://') && !href.startsWith('https://')) {
+            href = 'https://' + href;
+          }
+          linkHtml = `<a href="${href}" target="_blank" class="task-link-btn" title="Mở tài liệu">🔗</a>`;
+        }
+      }
+
+      const escapedText = task.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      item.innerHTML = `
+        <div class="daily-task-checkbox" onclick="toggleTaskStatus('${selectedDateStr}', ${idx})"></div>
+        <div class="daily-task-content" style="min-width: 0;">
+           <div class="daily-task-text">${escapedText} ${linkHtml}</div>
+           <div class="daily-task-topic">${TOPIC_NAMES[task.topic] || "📌 Khác"}</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-left: 8px; flex-shrink: 0; padding-top: 4px;">
+           <button class="btn-edit-task" onclick="startEditTask(${idx})" title="Chỉnh sửa" style="background: none; border: none; color: #3b82f6; cursor: pointer; opacity: 0.5; padding: 0; display: flex; align-items: center; width: 20px; height: 20px; justify-content: center; transition: opacity 0.2s;">
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+           </button>
+           <button class="btn-delete-task" onclick="deleteTask('${selectedDateStr}', ${idx})" title="Xóa" style="background: none; border: none; color: #ef4444; cursor: pointer; opacity: 0.5; padding: 0; display: flex; align-items: center; font-size: 14px; width: 20px; height: 20px; justify-content: center; transition: opacity 0.2s;">✕</button>
+        </div>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  // Render Unsubmitted Homeworks Section at the bottom of tasks list for today
+  if (isSelectedToday && window.unsubmittedHomeworks && window.unsubmittedHomeworks.length > 0) {
+    const hwHeader = document.createElement("div");
+    hwHeader.className = "class-schedule-header";
+    hwHeader.style.marginTop = "16px";
+    hwHeader.style.color = "#ef4444";
+    hwHeader.style.fontWeight = "bold";
+    hwHeader.innerText = `🎯 BÀI TẬP CHƯA HOÀN THÀNH (${window.unsubmittedHomeworks.length})`;
+    list.appendChild(hwHeader);
+
+    window.unsubmittedHomeworks.forEach(hw => {
+      const item = document.createElement("div");
+      item.className = "daily-task-item";
+      item.style.borderLeft = "3px solid #ef4444";
+      item.style.background = "rgba(239, 68, 68, 0.02)";
+      item.style.cursor = "pointer";
+      item.style.padding = "10px";
+      item.style.borderRadius = "6px";
+      item.style.transition = "all 0.2s";
+      item.style.display = "flex";
+      item.style.alignItems = "flex-start";
+      item.style.justifyContent = "space-between";
+      item.style.gap = "6px";
+      item.style.marginTop = "8px";
+      
+      let deadlineText = "";
+      if (hw.deadline) {
+        try {
+          const dlDate = new Date(hw.deadline);
+          const now = new Date();
+          const isExpired = now > dlDate;
+          const formattedDl = dlDate.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          deadlineText = `<div style="font-size: 0.72rem; color: ${isExpired ? '#ef4444' : '#2563eb'}; font-weight: bold; margin-top: 2px;">⏰ Hạn: ${formattedDl} ${isExpired ? '(Quá hạn)' : ''}</div>`;
+        } catch (e) {}
+      }
+
+      const found = window.findFileInLibrary(hw.fileId);
+      const fileType = found ? found.type : 'course';
+
+      item.onclick = function() {
+        window.openHomeworkFromFile(hw.fileId, hw.fileTitle, fileType);
+      };
+
+      item.innerHTML = `
+        <div style="flex: 1; font-size: 0.8rem; line-height: 1.4; color: #475569;">
+          <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px; flex-wrap: wrap;">
+            <span style="font-size: 0.7rem; background: #fee2e2; color: #ef4444; padding: 1px 4px; border-radius: 3px; font-weight: 800; text-transform: uppercase;">Chưa nộp</span>
+            <span style="font-size: 0.72rem; color: #64748b; font-weight: bold; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📂 ${hw.fileTitle}</span>
+          </div>
+          <div style="font-weight: 600; color: #334155; font-size: 0.8rem; margin-top: 2px;">Yêu cầu: ${hw.note}</div>
+          ${deadlineText}
+        </div>
+        <span style="font-size: 1rem; flex-shrink: 0; align-self: center; margin-left: auto;">✍️</span>
+      `;
+      list.appendChild(item);
+    });
+  }
+  if (typeof renderDailyRoutines === "function") {
+    renderDailyRoutines();
+  }
+}
+
+// ==========================================
+// THỜI GIAN BIỂU MỖI NGÀY - DAILY ROUTINES
+// ==========================================
+let selectedDailyTab = "tasks";
+let dailyRoutines = [];
+let routineCompletions = {};
+let editingRoutineId = null;
+
+function setSelectValueWithFallback(selectEl, val) {
+  if (!selectEl) return;
+  let exists = false;
+  for (let i = 0; i < selectEl.options.length; i++) {
+    if (selectEl.options[i].value === val) {
+      exists = true;
+      break;
+    }
+  }
+  if (!exists) {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.innerText = val;
+    selectEl.appendChild(opt);
+  }
+  selectEl.value = val;
+}
+
+function initDailyRoutines() {
+  const savedRoutines = getCleanLocalStorage("tds_daily_routines");
+  if (savedRoutines) {
+    try {
+      dailyRoutines = JSON.parse(savedRoutines);
+    } catch (e) {
+      console.error("Error parsing daily routines", e);
+      dailyRoutines = [];
+    }
+  } else {
+    // Default preset routines
+    dailyRoutines = [
+      { id: "def_1", start: "05:30", end: "06:00", activity: "Thức dậy & Vệ sinh cá nhân ☀️", repeat: "daily", color: "#ec4899" },
+      { id: "def_2", start: "06:00", end: "07:30", activity: "Đọc lý thuyết Sinh Học (Campbell) 📖", repeat: "daily", color: "#3b82f6" },
+      { id: "def_3", start: "07:30", end: "08:00", activity: "Ăn sáng lành mạnh 🍳", repeat: "daily", color: "#f59e0b" },
+      { id: "def_4", start: "08:00", end: "11:30", activity: "Học tập chuyên sâu lớp chuyên / tự học", repeat: "weekdays", color: "#10b981" },
+      { id: "def_5", start: "12:00", end: "13:00", activity: "Nghỉ trưa hồi sức 😴", repeat: "daily", color: "#8b5cf6" },
+      { id: "def_6", start: "14:00", end: "17:00", activity: "Giải đề trắc nghiệm lý thuyết chuyên đề", repeat: "daily", color: "#10b981" },
+      { id: "def_7", start: "19:30", end: "21:30", activity: "Học nhóm trực tuyến / Thầy cô hướng dẫn 💻", repeat: "weekdays", color: "#3b82f6" },
+      { id: "def_8", start: "22:00", end: "22:30", activity: "Tổng kết kiến thức & Lên lịch ngày mai 📝", repeat: "daily", color: "#ec4899" }
+    ];
+    localStorage.setItem("tds_daily_routines", JSON.stringify(dailyRoutines));
+  }
+
+  const savedCompletions = getCleanLocalStorage("tds_daily_routine_completions");
+  if (savedCompletions) {
+    try {
+      routineCompletions = JSON.parse(savedCompletions);
+    } catch (e) {
+      console.error("Error parsing routine completions", e);
+      routineCompletions = {};
+    }
+  }
+}
+
+function switchStudyTab(tab) {
+  selectedDailyTab = tab;
+  
+  const btnTasks = document.getElementById("studyTabBtn_tasks");
+  const btnRoutine = document.getElementById("studyTabBtn_routine");
+  const containerTasks = document.getElementById("studyTasksContainer");
+  const containerRoutine = document.getElementById("studyRoutineContainer");
+  
+  if (tab === "tasks") {
+    if (btnTasks) btnTasks.classList.add("active");
+    if (btnRoutine) btnRoutine.classList.remove("active");
+    if (containerTasks) containerTasks.style.display = "flex";
+    if (containerRoutine) containerRoutine.style.display = "none";
+  } else {
+    if (btnTasks) btnTasks.classList.remove("active");
+    if (btnRoutine) btnRoutine.classList.add("active");
+    if (containerTasks) containerTasks.style.display = "none";
+    if (containerRoutine) containerRoutine.style.display = "flex";
+    
+    toggleRoutineDateInput();
+    renderDailyRoutines();
+  }
+}
+
+function toggleRoutineDateInput() {
+  const repeatSelect = document.getElementById("newRoutineRepeat");
+  const container = document.getElementById("routineSpecificDateContainer");
+  const label = document.getElementById("routineSpecificDateLabel");
+  
+  if (!repeatSelect || !container || !label) return;
+  
+  if (repeatSelect.value === "date") {
+    container.style.display = "block";
+    const dateObj = new Date(selectedDateStr);
+    label.innerText = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+  } else {
+    container.style.display = "none";
+  }
+}
+
+function addDailyRoutine() {
+  const startHSelect = document.getElementById("newRoutineStartHour");
+  const startMSelect = document.getElementById("newRoutineStartMin");
+  const endHSelect = document.getElementById("newRoutineEndHour");
+  const endMSelect = document.getElementById("newRoutineEndMin");
+  const activityInput = document.getElementById("newRoutineActivity");
+  const repeatSelect = document.getElementById("newRoutineRepeat");
+  const colorSelect = document.getElementById("newRoutineColor");
+  
+  if (!startHSelect || !startMSelect || !endHSelect || !endMSelect || !activityInput || !repeatSelect || !colorSelect) return;
+  
+  const start = `${startHSelect.value}:${startMSelect.value}`;
+  const end = `${endHSelect.value}:${endMSelect.value}`;
+  const activity = activityInput.value.trim();
+  const repeat = repeatSelect.value;
+  const color = colorSelect.value;
+  
+  if (!activity) {
+    showToast("Vui lòng nhập tên hoạt động", "warning");
+    return;
+  }
+  
+  if (editingRoutineId !== null) {
+    const routine = dailyRoutines.find(r => r.id === editingRoutineId);
+    if (routine) {
+      routine.start = start;
+      routine.end = end;
+      routine.activity = activity;
+      routine.repeat = repeat;
+      routine.color = color;
+      if (repeat === "date") {
+        routine.specificDate = selectedDateStr;
+      } else {
+        delete routine.specificDate;
+      }
+    }
+    editingRoutineId = null;
+    
+    const btnSubmit = document.getElementById("btnAddRoutineSubmit");
+    const btnCancel = document.getElementById("btnEditRoutineCancel");
+    if (btnSubmit) btnSubmit.innerText = "+ Thêm thời gian biểu";
+    if (btnCancel) btnCancel.style.display = "none";
+    showToast("Đã cập nhật mục thời gian biểu thành công", "success");
+  } else {
+    const newRoutine = {
+      id: "rt_" + Date.now().toString(),
+      start: start,
+      end: end,
+      activity: activity,
+      repeat: repeat,
+      color: color
+    };
+    if (repeat === "date") {
+      newRoutine.specificDate = selectedDateStr;
+    }
+    dailyRoutines.push(newRoutine);
+    showToast("Đã thêm thời gian biểu mới thành công", "success");
+  }
+  
+  localStorage.setItem("tds_daily_routines", JSON.stringify(dailyRoutines));
+  activityInput.value = "";
+  
+  // Reset select elements
+  if (startHSelect) startHSelect.value = "07";
+  if (startMSelect) startMSelect.value = "00";
+  if (endHSelect) endHSelect.value = "08";
+  if (endMSelect) endMSelect.value = "30";
+  
+  renderDailyRoutines();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function startEditRoutine(id) {
+  const routine = dailyRoutines.find(r => r.id === id);
+  if (!routine) return;
+  
+  editingRoutineId = id;
+  
+  const startHSelect = document.getElementById("newRoutineStartHour");
+  const startMSelect = document.getElementById("newRoutineStartMin");
+  const endHSelect = document.getElementById("newRoutineEndHour");
+  const endMSelect = document.getElementById("newRoutineEndMin");
+  const activityInput = document.getElementById("newRoutineActivity");
+  const repeatSelect = document.getElementById("newRoutineRepeat");
+  const colorSelect = document.getElementById("newRoutineColor");
+  const btnSubmit = document.getElementById("btnAddRoutineSubmit");
+  const btnCancel = document.getElementById("btnEditRoutineCancel");
+  
+  if (routine.start) {
+    const parts = routine.start.split(":");
+    if (parts.length === 2) {
+      setSelectValueWithFallback(startHSelect, parts[0]);
+      setSelectValueWithFallback(startMSelect, parts[1]);
+    }
+  }
+  if (routine.end) {
+    const parts = routine.end.split(":");
+    if (parts.length === 2) {
+      setSelectValueWithFallback(endHSelect, parts[0]);
+      setSelectValueWithFallback(endMSelect, parts[1]);
+    }
+  }
+  
+  if (activityInput) {
+    activityInput.value = routine.activity;
+    activityInput.focus();
+  }
+  if (repeatSelect) {
+    repeatSelect.value = routine.repeat;
+    toggleRoutineDateInput();
+  }
+  if (colorSelect) colorSelect.value = routine.color;
+  
+  if (btnSubmit) btnSubmit.innerText = "Lưu thay đổi";
+  if (btnCancel) btnCancel.style.display = "block";
+}
+
+function cancelEditRoutine() {
+  editingRoutineId = null;
+  
+  const activityInput = document.getElementById("newRoutineActivity");
+  const btnSubmit = document.getElementById("btnAddRoutineSubmit");
+  const btnCancel = document.getElementById("btnEditRoutineCancel");
+  
+  const startHSelect = document.getElementById("newRoutineStartHour");
+  const startMSelect = document.getElementById("newRoutineStartMin");
+  const endHSelect = document.getElementById("newRoutineEndHour");
+  const endMSelect = document.getElementById("newRoutineEndMin");
+  
+  if (startHSelect) startHSelect.value = "07";
+  if (startMSelect) startMSelect.value = "00";
+  if (endHSelect) endHSelect.value = "08";
+  if (endMSelect) endMSelect.value = "30";
+  
+  if (activityInput) activityInput.value = "";
+  if (btnSubmit) btnSubmit.innerText = "+ Thêm thời gian biểu";
+  if (btnCancel) btnCancel.style.display = "none";
+}
+
+function deleteDailyRoutine(id) {
+  if (editingRoutineId === id) {
+    cancelEditRoutine();
+  }
+  
+  dailyRoutines = dailyRoutines.filter(r => r.id !== id);
+  localStorage.setItem("tds_daily_routines", JSON.stringify(dailyRoutines));
+  showToast("Đã xóa mục thời gian biểu", "info");
+  
+  renderDailyRoutines();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function toggleRoutineCompletion(id) {
+  const compKey = `${selectedDateStr}_${id}`;
+  routineCompletions[compKey] = !routineCompletions[compKey];
+  
+  localStorage.setItem("tds_daily_routine_completions", JSON.stringify(routineCompletions));
+  
+  renderDailyRoutines();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function renderDailyRoutines() {
+  const list = document.getElementById("dailyRoutineList");
+  if (!list) return;
+  list.innerHTML = "";
+  
+  const titleLabel = document.getElementById("routineDateTitle");
+  if (titleLabel) {
+    const dateObj = new Date(selectedDateStr);
+    titleLabel.innerText = `Thời gian biểu ${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+  }
+  
+  const selDateObj = new Date(selectedDateStr);
+  const dayOfWeek = selDateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+  
+  const activeRoutines = dailyRoutines.filter(r => {
+    if (r.repeat === "daily") return true;
+    if (r.repeat === "weekdays" && !isWeekend) return true;
+    if (r.repeat === "weekends" && isWeekend) return true;
+    if (r.repeat === "date" && r.specificDate === selectedDateStr) return true;
+    return false;
+  });
+  
+  activeRoutines.sort((a, b) => a.start.localeCompare(b.start));
+  
+  if (activeRoutines.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.textAlign = "center";
+    empty.style.color = "#94a3b8";
+    empty.style.padding = "30px 20px";
+    empty.style.fontSize = "0.85rem";
+    empty.style.fontStyle = "italic";
+    empty.innerHTML = "Chưa có thời gian biểu hôm nay.<br>Hãy thêm hoặc áp dụng mẫu nhanh bên dưới!";
+    list.appendChild(empty);
+    return;
+  }
+  
+  activeRoutines.forEach(item => {
+    const isCompleted = !!routineCompletions[`${selectedDateStr}_${item.id}`];
+    const container = document.createElement("div");
+    container.className = `routine-item ${isCompleted ? 'completed' : ''}`;
+    container.style.borderLeft = `4px solid ${item.color}`;
+    
+    let repeatLabel = "🔁 Hàng ngày";
+    if (item.repeat === "weekdays") repeatLabel = "📅 Thứ 2 - Thứ 6";
+    else if (item.repeat === "weekends") repeatLabel = "🏖️ Thứ 7 - Chủ Nhật";
+    else if (item.repeat === "date") repeatLabel = "📌 Chỉ hôm nay";
+    
+    container.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+         <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleRoutineCompletion('${item.id}')" style="width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: #10b981;">
+         <div style="min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+               <span class="routine-time-badge" style="background: ${item.color}15; color: ${item.color};">🕒 ${item.start} - ${item.end}</span>
+            </div>
+            <div class="routine-text" style="margin-top: 4px;">${item.activity}</div>
+            <div class="routine-repeat-badge">${repeatLabel}</div>
+         </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+         <button class="btn-edit-task" onclick="startEditRoutine('${item.id}')" title="Sửa" style="background: none; border: none; color: #3b82f6; cursor: pointer; opacity: 0.6; padding: 0;">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+         </button>
+         <button class="btn-delete-task" onclick="deleteDailyRoutine('${item.id}')" title="Xóa" style="background: none; border: none; color: #ef4444; cursor: pointer; opacity: 0.6; padding: 0; font-size: 14px;">✕</button>
+      </div>
+    `;
+    list.appendChild(container);
+  });
+}
+
+function showQuickPresetRoutineModal() {
+  const modal = document.getElementById("routinePresetModal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeRoutinePresetModal() {
+  const modal = document.getElementById("routinePresetModal");
+  if (modal) modal.style.display = "none";
+}
+
+function applyRoutinePreset(type) {
+  let presets = [];
+  if (type === 'basic') {
+    presets = [
+      { id: "rt_b1", start: "05:30", end: "06:00", activity: "Thức dậy & Vệ sinh cá nhân ☀️", repeat: "daily", color: "#ec4899" },
+      { id: "rt_b2", start: "06:00", end: "07:30", activity: "Đọc lý thuyết Sinh Học cốt lõi 📖", repeat: "daily", color: "#3b82f6" },
+      { id: "rt_b3", start: "07:30", end: "08:00", activity: "Ăn sáng và chuẩn bị năng lượng học tập 🍳", repeat: "daily", color: "#f59e0b" },
+      { id: "rt_b4", start: "08:00", end: "11:30", activity: "Học tập chính khóa / Ôn tập chuyên đề nâng cao", repeat: "weekdays", color: "#10b981" },
+      { id: "rt_b5", start: "12:00", end: "13:00", activity: "Ăn trưa & Nghỉ trưa nạp năng lượng 😴", repeat: "daily", color: "#8b5cf6" },
+      { id: "rt_b6", start: "14:00", end: "17:00", activity: "Thực hành giải đề thi chọn lọc / Tự học 📝", repeat: "daily", color: "#10b981" },
+      { id: "rt_b7", start: "19:30", end: "21:30", activity: "Lớp học trực tuyến sinh hoạt đội tuyển 💻", repeat: "weekdays", color: "#3b82f6" },
+      { id: "rt_b8", start: "22:00", end: "22:30", activity: "Tổng hợp các lỗi sai & Ghi chép sổ tay Sinh Học 📒", repeat: "daily", color: "#ec4899" }
+    ];
+  } else if (type === 'intensive') {
+    presets = [
+      { id: "rt_i1", start: "05:00", end: "06:30", activity: "Cày nhanh 100 câu trắc nghiệm lý thuyết Sinh Học 🔥", repeat: "daily", color: "#ef4444" },
+      { id: "rt_i2", start: "06:30", end: "07:00", activity: "Vệ sinh cá nhân & Ăn sáng nhanh 🍳", repeat: "daily", color: "#f59e0b" },
+      { id: "rt_i3", start: "07:00", end: "11:30", activity: "Tập trung giải đề thi Học sinh giỏi các tỉnh năm trước ✏️", repeat: "daily", color: "#3b82f6" },
+      { id: "rt_i4", start: "11:45", end: "12:30", activity: "Ăn trưa & Thư giãn mắt ngắn 👀", repeat: "daily", color: "#8b5cf6" },
+      { id: "rt_i5", start: "13:00", end: "17:30", activity: "Nghiên cứu sâu các mảng khó: Di truyền, Tiến hóa, Sinh lý 🧬", repeat: "daily", color: "#10b981" },
+      { id: "rt_i6", start: "19:00", end: "22:00", activity: "Học nâng cao / Hỏi đáp Q&A, xem lại livestream giải chi tiết", repeat: "daily", color: "#3b82f6" },
+      { id: "rt_i7", start: "22:15", end: "23:00", activity: "Ôn nhanh thuật ngữ & Ghi nhớ hình ảnh sơ đồ Sinh học 🧠", repeat: "daily", color: "#ec4899" }
+    ];
+  } else if (type === 'balanced') {
+    presets = [
+      { id: "rt_p1", start: "06:00", end: "07:00", activity: "Vận động nhẹ nhàng & Thể dục khởi động ngày mới 🏃", repeat: "daily", color: "#10b981" },
+      { id: "rt_p2", start: "07:30", end: "09:00", activity: "Pomodoro Học tập: Đọc sách giáo khoa & Chuyên đề 📚", repeat: "daily", color: "#3b82f6" },
+      { id: "rt_p3", start: "09:15", end: "11:30", activity: "Pomodoro Học tập: Vẽ sơ đồ tư duy (Mindmap) 🌿", repeat: "weekdays", color: "#8b5cf6" },
+      { id: "rt_p4", start: "12:00", end: "13:30", activity: "Ăn trưa, Nghe nhạc không lời thư giãn & Chợp mắt 🎵", repeat: "daily", color: "#ec4899" },
+      { id: "rt_p5", start: "14:00", end: "16:30", activity: "Pomodoro Học tập: Giải bài tập sinh học định lượng 🔬", repeat: "daily", color: "#3b82f6" },
+      { id: "rt_p6", start: "16:45", end: "18:00", activity: "Giải trí / Thể thao ngoài trời lành mạnh 🏸", repeat: "daily", color: "#f59e0b" },
+      { id: "rt_p7", start: "19:30", end: "21:30", activity: "Pomodoro Học tập: Đọc đáp án thảo luận nhóm 👥", repeat: "weekdays", color: "#10b981" },
+      { id: "rt_p8", start: "22:00", end: "22:30", activity: "Viết nhật ký học tập, thiền nhẹ & Chuẩn bị ngủ sâu 🌌", repeat: "daily", color: "#ec4899" }
+    ];
+  }
+  
+  dailyRoutines = presets;
+  localStorage.setItem("tds_daily_routines", JSON.stringify(dailyRoutines));
+  
+  showToast("Đã áp dụng mẫu thời gian biểu nhanh thành công", "success");
+  closeRoutinePresetModal();
+  
+  renderDailyRoutines();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+let editingTaskIndex = null;
+
+function startEditTask(idx) {
+  const tasks = studyPlanData[selectedDateStr] || [];
+  if (idx < 0 || idx >= tasks.length) return;
+  
+  editingTaskIndex = idx;
+  const task = tasks[idx];
+  
+  const input = document.getElementById("newTaskInput");
+  const topicSel = document.getElementById("newTaskTopic");
+  const hiddenUrlInput = document.getElementById("hiddenTaskResourceUrl");
+  const pickerBtn = document.getElementById("taskResourcePickerBtn");
+  const btnSubmit = document.getElementById("btnAddTaskSubmit");
+  const btnCancel = document.getElementById("btnAddTaskCancel");
+  
+  if (input) {
+    input.value = task.text;
+    input.style.height = '';
+    input.style.height = input.scrollHeight + 'px';
+    input.focus();
+  }
+  if (topicSel) {
+    topicSel.value = task.topic || "khac";
+  }
+  if (hiddenUrlInput) {
+    hiddenUrlInput.value = task.link || "";
+  }
+  
+  if (pickerBtn) {
+    if (task.link) {
+      if (task.link.startsWith('{')) {
+        try {
+          const fileObj = JSON.parse(task.link);
+          pickerBtn.innerHTML = `📚 Đã chọn: ${fileObj.title || 'Tài liệu'}`;
+        } catch(e) {
+          pickerBtn.innerHTML = "📚 Đã đính kèm tài liệu";
+        }
+      } else {
+        pickerBtn.innerHTML = "📚 Đã đính kèm link";
+      }
+    } else {
+      pickerBtn.innerHTML = "📚 Chọn tài liệu đính kèm";
+    }
+  }
+  
+  if (btnSubmit) {
+    btnSubmit.innerHTML = "💾 Cập nhật nhiệm vụ";
+    btnSubmit.style.background = "#2563eb";
+  }
+  if (btnCancel) {
+    btnCancel.style.display = "block";
+  }
+  
+  const inputArea = document.querySelector(".daily-task-input-area");
+  if (inputArea) {
+    inputArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function cancelEditTask() {
+  editingTaskIndex = null;
+  
+  const input = document.getElementById("newTaskInput");
+  const topicSel = document.getElementById("newTaskTopic");
+  const hiddenUrlInput = document.getElementById("hiddenTaskResourceUrl");
+  const pickerBtn = document.getElementById("taskResourcePickerBtn");
+  const btnSubmit = document.getElementById("btnAddTaskSubmit");
+  const btnCancel = document.getElementById("btnAddTaskCancel");
+  
+  if (input) {
+    input.value = "";
+    input.style.height = "";
+  }
+  if (topicSel) topicSel.value = "khac";
+  if (hiddenUrlInput) hiddenUrlInput.value = "";
+  if (pickerBtn) pickerBtn.innerHTML = "📚 Chọn tài liệu đính kèm";
+  
+  if (btnSubmit) {
+    btnSubmit.innerHTML = "+ Thêm nhiệm vụ";
+    btnSubmit.style.background = "#10b981";
+  }
+  if (btnCancel) {
+    btnCancel.style.display = "none";
+  }
+}
+
+function addDailyTask() {
+  const input = document.getElementById("newTaskInput");
+  const topicSel = document.getElementById("newTaskTopic");
+  const hiddenUrlInput = document.getElementById("hiddenTaskResourceUrl");
+  if (!input || !topicSel) return;
+  const text = input.value.trim();
+  const linkText = hiddenUrlInput ? hiddenUrlInput.value.trim() : "";
+  if (!text) {
+    showToast("Vui lòng nhập tên nhiệm vụ", "warning");
+    return;
+  }
+
+  if (!studyPlanData[selectedDateStr]) {
+    studyPlanData[selectedDateStr] = [];
+  }
+
+  if (editingTaskIndex !== null) {
+    const idx = editingTaskIndex;
+    if (studyPlanData[selectedDateStr][idx]) {
+      studyPlanData[selectedDateStr][idx].text = text;
+      studyPlanData[selectedDateStr][idx].topic = topicSel.value;
+      studyPlanData[selectedDateStr][idx].link = linkText;
+    }
+    editingTaskIndex = null;
+    
+    const btnSubmit = document.getElementById("btnAddTaskSubmit");
+    const btnCancel = document.getElementById("btnAddTaskCancel");
+    if (btnSubmit) {
+      btnSubmit.innerHTML = "+ Thêm nhiệm vụ";
+      btnSubmit.style.background = "#10b981";
+    }
+    if (btnCancel) {
+      btnCancel.style.display = "none";
+    }
+    showToast("Đã cập nhật nhiệm vụ thành công", "success");
+  } else {
+    studyPlanData[selectedDateStr].push({
+      id: Date.now().toString(),
+      text: text,
+      topic: topicSel.value,
+      completed: false,
+      link: linkText
+    });
+  }
+
+  input.value = "";
+  input.style.height = "";
+  if (hiddenUrlInput) hiddenUrlInput.value = "";
+  const btn = document.getElementById("taskResourcePickerBtn");
+  if (btn) btn.innerHTML = "📚 Chọn tài liệu đính kèm";
+  
+  saveStateToHistory(studyPlanData);
+  persistData();
+  renderCalendar();
+  renderDailyTasks();
+  updateOverallProgress();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function toggleTaskStatus(dateStr, idx) {
+  studyPlanData[dateStr][idx].completed = !studyPlanData[dateStr][idx].completed;
+  saveStateToHistory(studyPlanData);
+  persistData();
+  renderCalendar();
+  renderDailyTasks();
+  updateOverallProgress();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function deleteTask(dateStr, idx) {
+  if (editingTaskIndex !== null && dateStr === selectedDateStr) {
+    if (editingTaskIndex === idx) {
+      cancelEditTask();
+    } else if (editingTaskIndex > idx) {
+      editingTaskIndex--;
+    }
+  }
+  studyPlanData[dateStr].splice(idx, 1);
+  if (studyPlanData[dateStr].length === 0) {
+    delete studyPlanData[dateStr];
+  }
+  saveStateToHistory(studyPlanData);
+  persistData();
+  renderCalendar();
+  renderDailyTasks();
+  updateOverallProgress();
+  if (typeof renderDashboardStudyPlan === "function") {
+    renderDashboardStudyPlan();
+  }
+}
+
+function openTaskResourcePicker() {
+  const modal = document.getElementById('taskResourcePickerModal');
+  const content = document.getElementById('taskResourcePickerContent');
+  
+  let html = `
+    <div style="margin-bottom: 20px; position: relative;">
+      <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 1.1rem; pointer-events: none;">🔍</span>
+      <input type="text" id="taskResourceSearch" class="task-input-control" style="padding-left: 40px !important; height: 44px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 0; width: 100%; border: 1.5px solid #cbd5e1; box-sizing: border-box;" placeholder="Tìm kiếm tài liệu, khóa học..." onkeyup="searchTaskResources(this.value)">
+    </div>
+    <div id="taskResourceSearchResults" style="display: none; margin-bottom: 20px;">
+       <h4 style="margin: 0 0 10px; color: #64748b; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Kết quả tìm kiếm</h4>
+       <div id="taskResourceSearchList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+    </div>
+    <div id="taskResourceDefaultLists">
+  `;
+  
+  // Lấy dữ liệu Favorites
+  let favorites = typeof getFavoriteFilesData === 'function' ? getFavoriteFilesData() : [];
+  
+  // Lấy dữ liệu Recent
+  let recents = typeof getRecentFilesData === 'function' ? getRecentFilesData() : [];
+
+  window.currentTaskPickerItems = {
+    favorites: favorites,
+    recents: recents
+  };
+  
+  if (favorites.length > 0) {
+    html += '<h4 style="margin: 0 0 10px; color: #64748b; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">⭐ Yêu thích</h4>';
+    html += '<div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">';
+    favorites.forEach((item, index) => {
+      const isMock = typeof isMockExamFile === 'function' && isMockExamFile(item.fileId, item.title, item.folder, item.category);
+      let icon = '📚';
+      let typeLabel = 'Sách';
+      let badgeClass = 'badge-book';
+      
+      if (item.category === 'course') {
+        icon = '🎓';
+        typeLabel = 'Khóa học';
+        badgeClass = 'badge-course';
+      } else if (isMock) {
+        icon = '📝';
+        typeLabel = 'Thi thử';
+        badgeClass = 'badge-mock';
+      } else if (item.category === 'exam') {
+        icon = '📑';
+        typeLabel = 'Đề thi';
+        badgeClass = 'badge-exam';
+      }
+
+      html += `
+        <div class="resource-picker-item" onclick="handleTaskResourceSelection(window.currentTaskPickerItems.favorites[${index}])">
+          <div class="resource-picker-name">
+            <span class="resource-icon">${icon}</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span class="resource-title" title="${item.title}">${item.title}</span>
+              <span class="resource-meta">${item.folder || 'Thư mục chính'}</span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <span class="resource-badge ${badgeClass}">${typeLabel}</span>
+            <div class="resource-picker-action">Chọn</div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="empty-resource-state" style="margin-bottom: 20px;">Chưa có tài liệu yêu thích nào.</div>';
+  }
+  
+  if (recents.length > 0) {
+    html += '<div style="margin-bottom: 10px;">';
+    html += '<h4 style="margin: 0 0 10px; color: #64748b; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">🕒 Xem gần đây</h4>';
+    html += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+    recents.forEach((item, index) => {
+      const isMock = typeof isMockExamFile === 'function' && isMockExamFile(item.fileId, item.title, item.folder, item.category);
+      let icon = '📚';
+      let typeLabel = 'Sách';
+      let badgeClass = 'badge-book';
+      
+      if (item.category === 'course') {
+        icon = '🎓';
+        typeLabel = 'Khóa học';
+        badgeClass = 'badge-course';
+      } else if (isMock) {
+        icon = '📝';
+        typeLabel = 'Thi thử';
+        badgeClass = 'badge-mock';
+      } else if (item.category === 'exam') {
+        icon = '📑';
+        typeLabel = 'Đề thi';
+        badgeClass = 'badge-exam';
+      }
+
+      html += `
+        <div class="resource-picker-item" onclick="handleTaskResourceSelection(window.currentTaskPickerItems.recents[${index}])">
+          <div class="resource-picker-name">
+            <span class="resource-icon">${icon}</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span class="resource-title" title="${item.title}">${item.title}</span>
+              <span class="resource-meta">${item.folder || 'Thư mục chính'}</span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <span class="resource-badge ${badgeClass}">${typeLabel}</span>
+            <div class="resource-picker-action">Chọn</div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div></div>';
+  } else {
+    html += '<div class="empty-resource-state">Chưa có lịch sử tài liệu xem gần đây.</div>';
+  }
+  
+  html += '</div>'; // End default lists
+  content.innerHTML = html;
+  modal.style.display = 'flex';
+  
+  // Reset search input
+  const searchInput = document.getElementById('taskResourceSearch');
+  if (searchInput) searchInput.value = '';
+}
+
+function searchTaskResources(query) {
+  const defaultLists = document.getElementById('taskResourceDefaultLists');
+  const searchResults = document.getElementById('taskResourceSearchResults');
+  const searchList = document.getElementById('taskResourceSearchList');
+  
+  query = query.toLowerCase().trim();
+  if (!query) {
+    defaultLists.style.display = 'block';
+    searchResults.style.display = 'none';
+    return;
+  }
+  
+  defaultLists.style.display = 'none';
+  searchResults.style.display = 'block';
+  
+  let results = [];
+  
+  const addIfMatch = (arr, category) => {
+    if (arr && Array.isArray(arr)) {
+      arr.forEach(item => {
+        const title = item.title || "";
+        if (title.toLowerCase().includes(query)) {
+          results.push({
+            fileId: item.fileId,
+            title: title,
+            folder: item.folder || "Chưa phân loại",
+            type: item.type || "pdf",
+            category: category
+          });
+        }
+      });
+    }
+  };
+  
+  addIfMatch(typeof allBooks !== 'undefined' ? allBooks : [], 'book');
+  addIfMatch(typeof allExams !== 'undefined' ? allExams : [], 'exam');
+  addIfMatch(typeof allCourses !== 'undefined' ? allCourses : [], 'course');
+  addIfMatch(typeof allMockExams !== 'undefined' ? allMockExams : [], 'mockExam');
+  
+  results = results.slice(0, 20);
+  window.currentTaskPickerSearchResults = results;
+  
+  if (results.length === 0) {
+    searchList.innerHTML = '<div class="empty-resource-state">Không tìm thấy kết quả phù hợp.</div>';
+    return;
+  }
+  
+  let html = '';
+  results.forEach((item, index) => {
+    const isMock = typeof isMockExamFile === 'function' && isMockExamFile(item.fileId, item.title, item.folder, item.category);
+    let icon = '📚';
+    let typeLabel = 'Sách';
+    let badgeClass = 'badge-book';
+    
+    if (item.category === 'course') {
+      icon = '🎓';
+      typeLabel = 'Khóa học';
+      badgeClass = 'badge-course';
+    } else if (isMock) {
+      icon = '📝';
+      typeLabel = 'Thi thử';
+      badgeClass = 'badge-mock';
+    } else if (item.category === 'exam') {
+      icon = '📑';
+      typeLabel = 'Đề thi';
+      badgeClass = 'badge-exam';
+    }
+    
+    html += `
+      <div class="resource-picker-item" onclick="handleTaskResourceSelection(window.currentTaskPickerSearchResults[${index}])">
+        <div class="resource-picker-name">
+          <span class="resource-icon">${icon}</span>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+            <span class="resource-title" title="${item.title}">${item.title}</span>
+            <span class="resource-meta">${item.folder || 'Thư mục chính'}</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+          <span class="resource-badge ${badgeClass}">${typeLabel}</span>
+          <div class="resource-picker-action">Chọn</div>
+        </div>
+      </div>
+    `;
+  });
+  searchList.innerHTML = html;
+}
+
+function handleTaskResourceSelection(file) {
+  const hiddenUrlInput = document.getElementById("hiddenTaskResourceUrl");
+  if (hiddenUrlInput) {
+    hiddenUrlInput.value = JSON.stringify(file); 
+    showToast("✅ Đã đính kèm tài liệu: " + file.title, "success");
+    const btn = document.getElementById("taskResourcePickerBtn");
+    if (btn) btn.innerHTML = `📚 Đã chọn: ${file.title}`;
+  }
+  
+  document.getElementById('taskResourcePickerModal').style.display = 'none';
+}
+
+function navigateToResource(file) {
+    if (!file) return;
+    const category = file.category || (file.type === 'exam' ? 'exam' : 'book');
+    const isMock = typeof isMockExamFile === 'function' && isMockExamFile(file.fileId, file.title, file.folder, category);
+    
+    // Ghi nhận file đang kích hoạt để tự động bung folder khi render lại
+    window.activeResourceFileId = file.fileId;
+    
+    if (isMock) {
+        switchView('mockExams').then((success) => {
+            if (success !== false && currentView === 'mockExams') {
+                if (typeof displayMockExams === 'function' && typeof allMockExams !== 'undefined') displayMockExams(allMockExams);
+                viewMockExam({ fileId: file.fileId, title: file.title, type: file.type || 'pdf' });
+            }
+        });
+    } else if (category === 'course') {
+        switchView('courses').then((success) => {
+            if (success !== false && currentView === 'courses') {
+                if (typeof displayCourses === 'function' && typeof allCourses !== 'undefined') displayCourses(allCourses);
+                readCourse(file.fileId, file.title, file.type, file.folder);
+            }
+        });
+    } else if (category === 'exam') {
+        switchView('exams').then((success) => {
+            if (success !== false && currentView === 'exams') {
+                if (typeof displayExams === 'function' && typeof allExams !== 'undefined') displayExams(allExams);
+                requestOpenBook(file.fileId, file.title, true, 'exam', file.folder);
+            }
+        });
+    } else {
+        switchView('books').then((success) => {
+            if (success !== false && currentView === 'books') {
+                if (typeof displayBooks === 'function' && typeof allBooks !== 'undefined') displayBooks(allBooks);
+                requestOpenBook(file.fileId, file.title, true, 'book', file.folder);
+            }
+        });
+    }
+}
+
+function updateOverallProgress() {
+  let totalTasks = 0;
+  let completedTasks = 0;
+
+  Object.values(studyPlanData).forEach(dayTasks => {
+    dayTasks.forEach(task => {
+      if (task.topic !== "khac") {
+         totalTasks++;
+         if (task.completed) completedTasks++;
+      }
+    });
+  });
+
+  const overall = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+  const progressEl = document.getElementById("overallStudyProgress");
+  if (progressEl) progressEl.innerText = overall + "%";
+}
+
+// Initialize on load & ready state
+function setupStudyPlanFloatingFab() {
+  initStudyPlan();
+  updateMiniStudyBadge();
+  
+  const floatingBtn = document.getElementById("floatingStudyPlanBtn");
+  if (floatingBtn && !floatingBtn.__dragInitialized) {
+    floatingBtn.__dragInitialized = true;
+    if (typeof makeElementDraggable === "function") {
+      makeElementDraggable(floatingBtn, (moved) => {
+        if (moved) {
+          window.studyFabJustDragged = true;
+          setTimeout(() => { window.studyFabJustDragged = false; }, 200);
+        }
+      });
+    }
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(setupStudyPlanFloatingFab, 300);
+  });
+} else {
+  setTimeout(setupStudyPlanFloatingFab, 100);
+}
+
+// Floating study plan drawer logic
+function toggleMiniStudyDrawer() {
+  if (window.studyFabJustDragged) return;
+  const drawer = document.getElementById("miniStudyDrawer");
+  const backdrop = document.getElementById("miniStudyDrawerBackdrop");
+  if (!drawer || !backdrop) return;
+  
+  const isActive = drawer.classList.contains("active");
+  if (isActive) {
+    closeMiniStudyDrawer();
+  } else {
+    drawer.classList.add("active");
+    backdrop.classList.add("active");
+    renderMiniStudyDrawer();
+  }
+}
+
+function closeMiniStudyDrawer() {
+  const drawer = document.getElementById("miniStudyDrawer");
+  const backdrop = document.getElementById("miniStudyDrawerBackdrop");
+  if (drawer) drawer.classList.remove("active");
+  if (backdrop) backdrop.classList.remove("active");
+}
+
+window.toggleMiniStudyDrawer = toggleMiniStudyDrawer;
+window.closeMiniStudyDrawer = closeMiniStudyDrawer;
+
+function renderMiniStudyDrawer() {
+  const container = document.getElementById("miniStudyList");
+  if (!container) return;
+  
+  const todayStr = formatDate(new Date());
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  let html = "";
+  
+  // Render Class Schedules first
+  const classesToday = (typeof getClassSchedulesForDate === "function") ? getClassSchedulesForDate(todayStr) : [];
+  if (classesToday && classesToday.length > 0) {
+    html += `<div class="class-schedule-header" style="margin-bottom: 8px;">📅 LỚP HỌC TRỰC TUYẾN</div>`;
+    classesToday.forEach(cls => {
+      html += `
+        <div class="class-schedule-item" style="border-left: 3px solid ${cls.color}; margin-bottom: 10px; padding: 8px 10px;">
+          <div style="min-width: 0; flex: 1;">
+            <div class="class-schedule-name" style="font-size: 0.8rem;">${cls.name}</div>
+            <div class="class-schedule-time" style="font-size: 0.7rem; margin-top: 2px;">🕒 ${cls.time}</div>
+          </div>
+          ${cls.link ? `
+            <a href="${ensureAbsoluteUrl(cls.link)}" target="_blank" style="background: ${cls.color}; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 2px; box-shadow: 0 2px 4px ${cls.color}15;">🎥 Vào Lớp</a>
+          ` : `<span style="font-size: 0.7rem; color: #94a3b8; font-style: italic;">Chưa có link</span>`}
+        </div>
+      `;
+    });
+  }
+  
+  // Tasks Section
+  const tasks = (typeof studyPlanData === "object" && studyPlanData) ? (studyPlanData[todayStr] || []) : [];
+  
+  if (classesToday.length > 0 || tasks.length > 0) {
+    html += `<div class="class-schedule-header" style="margin-bottom: 8px; margin-top: 12px;">📝 NHIỆM VỤ CÁ NHÂN</div>`;
+  }
+  
+  if (tasks.length === 0) {
+    if (classesToday.length === 0 && (!window.unsubmittedHomeworks || window.unsubmittedHomeworks.length === 0)) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 180px; color: ${isDark ? '#cbd5e1' : '#64748b'}; text-align: center;">
+          <span style="font-size: 2rem;">✨</span>
+          <p style="margin: 0; font-size: 0.85rem; font-weight: 500;">Hôm nay trống lịch học.<br>Hãy thêm nhiệm vụ mới nhé!</p>
+        </div>
+      `;
+      return;
+    } else if (tasks.length === 0 && (classesToday.length > 0 || (window.unsubmittedHomeworks && window.unsubmittedHomeworks.length > 0))) {
+      html += `
+        <div style="text-align: center; color: ${isDark ? '#cbd5e1' : '#94a3b8'}; padding: 10px; font-size: 0.8rem; font-style: italic; margin-bottom: 8px;">
+          Không có nhiệm vụ cá nhân nào.
+        </div>
+      `;
+    }
+  } else {
+    tasks.forEach((task, idx) => {
+      const isCompleted = task.completed;
+      const textStyle = isCompleted 
+        ? "text-decoration: line-through; color: #94a3b8;" 
+        : (isDark ? "color: #f1f5f9;" : "color: #334155;");
+      const escText = task.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const dotColor = isCompleted ? "#10b981" : (getTopicColor(task.topic) || "#cbd5e1");
+      
+      html += `
+        <div class="mini-study-item" onclick="toggleMiniStudyTask('${todayStr}', ${idx})" title="Nhấn để đổi trạng thái" style="margin-bottom: 8px;">
+          <div style="width: 16px; height: 16px; border-radius: 50%; border: 2px solid ${dotColor}; background: ${isCompleted ? '#10b981' : 'transparent'}; margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+            ${isCompleted ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+          </div>
+          <div style="flex: 1; font-size: 0.85rem; font-weight: 500; line-height: 1.4; ${textStyle} word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap;">${escText}</div>
+        </div>
+      `;
+    });
+  }
+  
+  // Render Unsubmitted Homeworks Section as urgent tasks!
+  if (window.unsubmittedHomeworks && window.unsubmittedHomeworks.length > 0) {
+    html += `<div class="class-schedule-header" style="margin-bottom: 8px; margin-top: 16px; color: #ef4444; font-weight: bold; display: flex; align-items: center; gap: 4px;">🎯 BÀI TẬP CHƯA HOÀN THÀNH (${window.unsubmittedHomeworks.length})</div>`;
+    window.unsubmittedHomeworks.forEach((hw) => {
+      let deadlineText = "";
+      if (hw.deadline) {
+        try {
+          const dlDate = new Date(hw.deadline);
+          const now = new Date();
+          const isExpired = now > dlDate;
+          const formattedDl = dlDate.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          deadlineText = `<div style="font-size: 0.72rem; color: ${isExpired ? '#ef4444' : '#2563eb'}; font-weight: bold; margin-top: 2px;">⏰ Hạn: ${formattedDl} ${isExpired ? '(Quá hạn)' : ''}</div>`;
+        } catch (e) {}
+      }
+      
+      const found = window.findFileInLibrary(hw.fileId);
+      const fileType = found ? found.type : 'course';
+      
+      html += `
+        <div class="mini-study-item" onclick="window.openHomeworkFromFile('${hw.fileId}', '${hw.fileTitle.replace(/'/g, "\\'")}', '${fileType}')" style="border-left: 3px solid #ef4444; background: ${isDark ? 'rgba(239, 68, 68, 0.05)' : 'rgba(239, 68, 68, 0.02)'}; padding: 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 8px;" onmouseover="this.style.background='rgba(239, 68, 68, 0.08)'" onmouseout="this.style.background='${isDark ? 'rgba(239, 68, 68, 0.05)' : 'rgba(239, 68, 68, 0.02)'}'">
+          <div style="flex: 1; font-size: 0.8rem; line-height: 1.4; color: ${isDark ? '#cbd5e1' : '#475569'};">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px; flex-wrap: wrap;">
+              <span style="font-size: 0.7rem; background: #fee2e2; color: #ef4444; padding: 1px 4px; border-radius: 3px; font-weight: 800; text-transform: uppercase;">Chưa nộp</span>
+              <span style="font-size: 0.72rem; color: #64748b; font-weight: bold; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📂 ${hw.fileTitle}</span>
+            </div>
+            <div style="font-weight: 600; color: ${isDark ? '#f1f5f9' : '#334155'}; font-size: 0.8rem; margin-top: 2px;">Yêu cầu: ${hw.note}</div>
+            ${deadlineText}
+          </div>
+          <span style="font-size: 1rem; flex-shrink: 0; align-self: center;">✍️</span>
+        </div>
+      `;
+    });
+  }
+  
+  container.innerHTML = html;
+}
+
+function toggleMiniStudyTask(dateStr, idx) {
+  if (typeof toggleTaskStatus === "function") {
+    toggleTaskStatus(dateStr, idx);
+  }
+}
+
+function updateMiniStudyBadge() {
+  const badge = document.getElementById("miniStudyBadge");
+  if (!badge) return;
+  
+  const todayStr = formatDate(new Date());
+  const tasks = (typeof studyPlanData === "object" && studyPlanData) ? (studyPlanData[todayStr] || []) : [];
+  
+  const regularUncompletedCount = tasks.filter(t => !t.completed).length;
+  const homeworkUncompletedCount = (window.unsubmittedHomeworks || []).length;
+  
+  const totalCount = regularUncompletedCount + homeworkUncompletedCount;
+  
+  if (totalCount > 0) {
+    badge.innerText = totalCount;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+function goToFullStudyPlan() {
+  closeMiniStudyDrawer();
+  if (typeof switchView === "function") {
+    switchView('studyPlan');
+  }
+}
+
+// Register globally so onclick attributes can resolve them
+window.toggleMiniStudyDrawer = toggleMiniStudyDrawer;
+window.closeMiniStudyDrawer = closeMiniStudyDrawer;
+window.toggleMiniStudyTask = toggleMiniStudyTask;
+window.goToFullStudyPlan = goToFullStudyPlan;
+window.updateMiniStudyBadge = updateMiniStudyBadge;
+window.renderMiniStudyDrawer = renderMiniStudyDrawer;
+
+// ================= CLASS SCHEDULES MANAGEMENT LOGIC =================
+let userClassSchedules = [];
+let adminSchedulesData = [];
+
+function getClassSchedulesForDate(dateStr) {
+  const dateObj = new Date(dateStr);
+  if (isNaN(dateObj.getTime())) return [];
+  const dayOfWeek = dateObj.getDay(); // 0-6
+  
+  // Map JS day to Viet day string
+  const dayMap = {
+    1: ["2", "hai"],
+    2: ["3", "ba"],
+    3: ["4", "tư", "bốn"],
+    4: ["5", "năm"],
+    5: ["6", "sáu"],
+    6: ["7", "bảy"],
+    0: ["8", "cn", "chủ nhật"]
+  };
+  
+  const matchKeys = dayMap[dayOfWeek] || [];
+  
+  return userClassSchedules.filter(sch => {
+    const schDays = (sch.days || "")
+      .toString()
+      .toLowerCase()
+      .replace(/[\.\/;]/g, ",")
+      .split(",")
+      .map(d => d.trim().replace(/^t/i, ""));
+    return schDays.some(sd => matchKeys.includes(sd) || sd === "8" && dayOfWeek === 0 || sd === "cn" && dayOfWeek === 0);
+  });
+}
+
+function loadUserClassSchedules() {
+  const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail") || "";
+  if (!email) return;
+  if (typeof google === 'undefined') {
+    // local mock mode
+    setTimeout(() => {
+      userClassSchedules = [
+        { code: 'TOAN101', name: 'Toán Thầy A', days: '2,4,6', time: '19:30 - 21:00', link: 'https://meet.google.com/abc-defg-hij', color: '#3b82f6' },
+        { code: 'LY102', name: 'Vật Lý Thầy B', days: '3,5,7', time: '18:00 - 19:30', link: 'https://meet.google.com/klm-nopq-rst', color: '#ec4899' }
+      ];
+      renderCalendar();
+      renderDailyTasks();
+      updateMiniStudyBadge();
+      renderMiniStudyDrawer();
+      if (typeof renderDashboardStudyPlan === 'function') {
+        renderDashboardStudyPlan();
+      }
+    }, 300);
+    return;
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        userClassSchedules = res.data || [];
+        renderCalendar();
+        renderDailyTasks();
+        updateMiniStudyBadge();
+        renderMiniStudyDrawer();
+        if (typeof renderDashboardStudyPlan === 'function') {
+          renderDashboardStudyPlan();
+        }
+      }
+    })
+    .getUserClassSchedules(email);
+}
+
+function loadAdminSchedules() {
+  const tbody = document.getElementById("adminScheduleTableBody");
+  if (tbody) {
+    tbody.innerHTML = getAdminSpinnerHTML("Đang tải lịch học...", true, 7);
+  }
+  const cardsContainer = document.getElementById("adminScheduleCardsContainer");
+  if (cardsContainer) {
+    cardsContainer.innerHTML = getAdminSpinnerHTML("Đang tải dữ liệu...", false, 1);
+  }
+  
+  if (typeof google === 'undefined') {
+    // Mock
+    setTimeout(() => {
+      adminSchedulesData = [
+        { code: 'TOAN101', name: 'Toán Thầy A', days: '2,4,6', time: '19:30 - 21:00', link: 'https://meet.google.com/abc-defg-hij', color: '#3b82f6' },
+        { code: 'LY102', name: 'Vật Lý Thầy B', days: '3,5,7', time: '18:00 - 19:30', link: 'https://meet.google.com/klm-nopq-rst', color: '#ec4899' }
+      ];
+      renderAdminSchedules(adminSchedulesData);
+    }, 300);
+    return;
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        adminSchedulesData = res.data || [];
+        renderAdminSchedules(adminSchedulesData);
+      } else {
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:red;">❌ Lỗi tải dữ liệu: ${res ? res.message : 'Lỗi không xác định'}</td></tr>`;
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:red;">❌ Lỗi kết nối server</td></tr>`;
+      }
+    })
+    .getClassSchedules();
+}
+
+let scheduleViewMode = getCleanLocalStorage('admin_schedule_view_mode') || 'cards';
+
+function setScheduleViewMode(mode) {
+  scheduleViewMode = mode;
+  localStorage.setItem('admin_schedule_view_mode', mode);
+  renderAdminSchedules(adminSchedulesData);
+}
+
+function updateViewToggleUI() {
+  const btnCards = document.getElementById("btnViewCards");
+  const btnTable = document.getElementById("btnViewTable");
+  const container = document.getElementById("adminScheduleViewToggleContainer");
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  if (container) {
+    container.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9";
+    container.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+  }
+  
+  if (btnCards && btnTable) {
+    if (scheduleViewMode === 'cards') {
+      btnCards.style.backgroundColor = "#10b981";
+      btnCards.style.color = "white";
+      btnCards.style.boxShadow = "0 2px 4px rgba(16,185,129,0.2)";
+      
+      btnTable.style.backgroundColor = "transparent";
+      btnTable.style.color = isDark ? "#cbd5e1" : "#475569";
+      btnTable.style.boxShadow = "none";
+    } else {
+      btnTable.style.backgroundColor = "#10b981";
+      btnTable.style.color = "white";
+      btnTable.style.boxShadow = "0 2px 4px rgba(16,185,129,0.2)";
+      
+      btnCards.style.backgroundColor = "transparent";
+      btnCards.style.color = isDark ? "#cbd5e1" : "#475569";
+      btnCards.style.boxShadow = "none";
+    }
+  }
+}
+
+function updateClassCodesDatalist() {
+  const datalist = document.getElementById("existing_class_codes");
+  if (!datalist) return;
+  datalist.innerHTML = "";
+  
+  const uniqueCodes = {};
+  adminSchedulesData.forEach(sch => {
+    const code = (sch.code || "").toString().trim().toUpperCase();
+    if (code) {
+      uniqueCodes[code] = sch.name || "";
+    }
+  });
+  
+  Object.keys(uniqueCodes).sort().forEach(code => {
+    const option = document.createElement("option");
+    option.value = code;
+    option.text = `${code} (${uniqueCodes[code]})`;
+    datalist.appendChild(option);
+  });
+}
+
+function renderAdminSchedules(data) {
+  const cardsContainer = document.getElementById("adminScheduleCardsContainer");
+  const tableContainer = document.getElementById("adminScheduleTableContainer");
+  const tbody = document.getElementById("adminScheduleTableBody");
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  initScheduleAutocomplete();
+  updateViewToggleUI();
+  updateClassCodesDatalist();
+  
+  if (scheduleViewMode === "cards") {
+    if (cardsContainer) cardsContainer.style.display = "grid";
+    if (tableContainer) tableContainer.style.display = "none";
+    
+    if (cardsContainer) {
+      cardsContainer.innerHTML = "";
+      
+      // Group data by code
+      const groups = {};
+      data.forEach(sch => {
+        const code = (sch.code || "").toString().trim().toUpperCase();
+        if (code) {
+          if (!groups[code]) groups[code] = [];
+          groups[code].push(sch);
+        }
+      });
+      
+      const uniqueCodes = Object.keys(groups).sort();
+      if (uniqueCodes.length === 0) {
+        cardsContainer.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding:40px; color:#94a3b8; font-style:italic; background:${isDark ? '#1e293b':'#f8fafc'}; border-radius:12px; border:1px dashed ${isDark?'#334155':'#cbd5e1'};">Không có lịch học nào khớp với tìm kiếm.</div>`;
+        return;
+      }
+      
+      uniqueCodes.forEach(code => {
+        const sList = groups[code];
+        const firstSched = sList[0];
+        const repColor = firstSched.color || "#10b981";
+        const repName = firstSched.name || "";
+        
+        const card = document.createElement("div");
+        card.style.backgroundColor = isDark ? "#1e293b" : "#ffffff";
+        card.style.borderRadius = "12px";
+        card.style.border = isDark ? "1px solid #334155" : "1px solid #e2e8f0";
+        card.style.borderLeft = `5px solid ${repColor}`;
+        card.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
+        card.style.padding = "16px";
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+        card.style.justifyContent = "space-between";
+        card.style.transition = "transform 0.2s, box-shadow 0.2s";
+        card.onmouseover = () => {
+          card.style.transform = "translateY(-2px)";
+          card.style.boxShadow = "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)";
+        };
+        card.onmouseout = () => {
+          card.style.transform = "none";
+          card.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
+        };
+        
+        // Card Header
+        const cardHeader = document.createElement("div");
+        cardHeader.style.display = "flex";
+        cardHeader.style.justifyContent = "space-between";
+        cardHeader.style.alignItems = "flex-start";
+        cardHeader.style.marginBottom = "12px";
+        cardHeader.style.gap = "8px";
+        
+        const headerText = document.createElement("div");
+        const codeSpan = document.createElement("span");
+        codeSpan.style.fontSize = "1.1rem";
+        codeSpan.style.fontWeight = "800";
+        codeSpan.style.color = repColor;
+        codeSpan.innerText = code;
+        
+        const nameDiv = document.createElement("div");
+        nameDiv.style.fontSize = "0.9rem";
+        nameDiv.style.fontWeight = "600";
+        nameDiv.style.color = isDark ? "#f1f5f9" : "#1e293b";
+        nameDiv.style.marginTop = "2px";
+        nameDiv.innerText = repName;
+        
+        headerText.appendChild(codeSpan);
+        headerText.appendChild(nameDiv);
+        
+        const sessionBadge = document.createElement("span");
+        sessionBadge.style.padding = "4px 8px";
+        sessionBadge.style.borderRadius = "20px";
+        sessionBadge.style.fontSize = "0.75rem";
+        sessionBadge.style.fontWeight = "bold";
+        sessionBadge.style.backgroundColor = isDark ? "#334155" : "#f1f5f9";
+        sessionBadge.style.color = isDark ? "#cbd5e1" : "#475569";
+        sessionBadge.innerText = `${sList.length} buổi`;
+        
+        cardHeader.appendChild(headerText);
+        cardHeader.appendChild(sessionBadge);
+        
+        card.appendChild(cardHeader);
+        
+        // Card Body (Sessions list)
+        const sessionListDiv = document.createElement("div");
+        sessionListDiv.style.display = "flex";
+        sessionListDiv.style.flexDirection = "column";
+        sessionListDiv.style.gap = "12px";
+        sessionListDiv.style.borderTop = isDark ? "1px solid #334155" : "1px solid #f1f5f9";
+        sessionListDiv.style.paddingTop = "12px";
+        sessionListDiv.style.marginBottom = "14px";
+        
+        sList.forEach(sch => {
+          const sBlock = document.createElement("div");
+          sBlock.style.backgroundColor = isDark ? "#0f172a" : "#fafafa";
+          sBlock.style.borderRadius = "8px";
+          sBlock.style.padding = "10px";
+          sBlock.style.border = isDark ? "1px solid #334155" : "1px solid #f1f5f9";
+          
+          const infoDiv = document.createElement("div");
+          infoDiv.style.fontSize = "0.8rem";
+          infoDiv.style.color = isDark ? "#cbd5e1" : "#475569";
+          infoDiv.style.lineHeight = "1.5";
+          
+          const daysText = document.createElement("div");
+          daysText.style.fontWeight = "600";
+          daysText.innerHTML = `📅 Thứ: <span style="color:${repColor};">${sch.days}</span>`;
+          
+          const timeText = document.createElement("div");
+          timeText.innerHTML = `🕒 Giờ: <span style="font-weight:500;">${sch.time}</span>`;
+          
+          infoDiv.appendChild(daysText);
+          infoDiv.appendChild(timeText);
+          
+          const meetDiv = document.createElement("div");
+          meetDiv.style.marginTop = "6px";
+          if (sch.link) {
+            const absMeetLink = ensureAbsoluteUrl(sch.link);
+            meetDiv.innerHTML = `<a href="${absMeetLink}" target="_blank" style="color: #60a5fa; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem;">🔗 Google Meet <span style="font-size:0.7rem; font-weight:normal; color:#94a3b8;">(${sch.link.substring(0,18)}...)</span></a>`;
+          } else {
+            meetDiv.innerHTML = `<span style="color:#94a3b8; font-style:italic; font-size:0.75rem;">Chưa cấu hình link Meet</span>`;
+          }
+          infoDiv.appendChild(meetDiv);
+          
+          sBlock.appendChild(infoDiv);
+          
+          // Action Buttons for this session
+          const actDiv = document.createElement("div");
+          actDiv.style.display = "flex";
+          actDiv.style.gap = "6px";
+          actDiv.style.marginTop = "8px";
+          actDiv.style.borderTop = isDark ? "1px dashed #334155" : "1px dashed #e2e8f0";
+          actDiv.style.paddingTop = "8px";
+          actDiv.style.justifyContent = "flex-end";
+          
+          const editBtn = document.createElement("button");
+          editBtn.innerText = "Sửa";
+          editBtn.style.padding = "3px 8px";
+          editBtn.style.fontSize = "0.75rem";
+          editBtn.style.fontWeight = "bold";
+          editBtn.style.cursor = "pointer";
+          editBtn.style.borderRadius = "4px";
+          editBtn.style.backgroundColor = isDark ? "#1e293b" : "#eff6ff";
+          editBtn.style.color = isDark ? "#60a5fa" : "#2563eb";
+          editBtn.style.border = isDark ? "1px solid #3b82f6" : "1px solid #bfdbfe";
+          editBtn.onclick = () => showAdminScheduleForm(sch);
+          
+          const cloneBtn = document.createElement("button");
+          cloneBtn.innerText = "Nhân bản";
+          cloneBtn.style.padding = "3px 8px";
+          cloneBtn.style.fontSize = "0.75rem";
+          cloneBtn.style.fontWeight = "bold";
+          cloneBtn.style.cursor = "pointer";
+          cloneBtn.style.borderRadius = "4px";
+          cloneBtn.style.backgroundColor = isDark ? "#1e293b" : "#f0fdf4";
+          cloneBtn.style.color = isDark ? "#4ade80" : "#166534";
+          cloneBtn.style.border = isDark ? "1px solid #22c55e" : "1px solid #bbf7d0";
+          cloneBtn.onclick = () => showAdminScheduleForm(sch, true);
+          
+          const delBtn = document.createElement("button");
+          delBtn.innerText = "Xóa";
+          delBtn.style.padding = "3px 8px";
+          delBtn.style.fontSize = "0.75rem";
+          delBtn.style.fontWeight = "bold";
+          delBtn.style.cursor = "pointer";
+          delBtn.style.borderRadius = "4px";
+          delBtn.style.backgroundColor = isDark ? "#7f1d1d" : "#fef2f2";
+          delBtn.style.color = isDark ? "#fca5a5" : "#dc2626";
+          delBtn.style.border = isDark ? "1px solid #f87171" : "1px solid #fecaca";
+          delBtn.onclick = () => deleteAdminSchedule(sch.code, sch.rowId);
+          
+          actDiv.appendChild(cloneBtn);
+          actDiv.appendChild(editBtn);
+          actDiv.appendChild(delBtn);
+          
+          sBlock.appendChild(actDiv);
+          sessionListDiv.appendChild(sBlock);
+        });
+        
+        card.appendChild(sessionListDiv);
+        
+        // Card Footer - Add Session button
+        const cardFooter = document.createElement("div");
+        const addSessionBtn = document.createElement("button");
+        addSessionBtn.innerHTML = `➕ Thêm Buổi Cho Lớp`;
+        addSessionBtn.style.width = "100%";
+        addSessionBtn.style.padding = "8px";
+        addSessionBtn.style.borderRadius = "8px";
+        addSessionBtn.style.border = `1px dashed ${repColor}`;
+        addSessionBtn.style.backgroundColor = isDark ? "rgba(16, 185, 129, 0.05)" : "rgba(16, 185, 129, 0.02)";
+        addSessionBtn.style.color = isDark ? "#cbd5e1" : "#1e293b";
+        addSessionBtn.style.fontSize = "0.75rem";
+        addSessionBtn.style.fontWeight = "bold";
+        addSessionBtn.style.cursor = "pointer";
+        addSessionBtn.style.transition = "background 0.2s";
+        addSessionBtn.onmouseover = () => {
+          addSessionBtn.style.backgroundColor = isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.08)";
+        };
+        addSessionBtn.onmouseout = () => {
+          addSessionBtn.style.backgroundColor = isDark ? "rgba(16, 185, 129, 0.05)" : "rgba(16, 185, 129, 0.02)";
+        };
+        addSessionBtn.onclick = () => {
+          showAdminScheduleForm(null, false, { code: code, name: repName, color: repColor });
+        };
+        
+        cardFooter.appendChild(addSessionBtn);
+        card.appendChild(cardFooter);
+        
+        cardsContainer.appendChild(card);
+      });
+    }
+  } else {
+    // TABLE VIEW
+    if (cardsContainer) cardsContainer.style.display = "none";
+    if (tableContainer) tableContainer.style.display = "block";
+    
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    
+    if (!data || data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#94a3b8; font-style:italic;">Không có lịch học nào. Nhấp "Thêm Lớp Mới" để tạo mới!</td></tr>`;
+      return;
+    }
+    
+    data.forEach(sch => {
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = isDark ? "1px solid #334155" : "1px solid #e2e8f0";
+      tr.style.transition = "background 0.2s";
+      tr.onmouseover = () => tr.style.backgroundColor = isDark ? "#1e293b" : "#f8fafc";
+      tr.onmouseout = () => tr.style.backgroundColor = "transparent";
+      
+      const tdCode = document.createElement("td");
+      tdCode.style.padding = "12px 16px";
+      tdCode.style.fontWeight = "700";
+      tdCode.style.color = isDark ? "#f1f5f9" : "#1e293b";
+      tdCode.innerText = sch.code || "";
+      
+      const tdName = document.createElement("td");
+      tdName.style.padding = "12px 16px";
+      tdName.style.fontWeight = "600";
+      tdName.style.color = isDark ? "#cbd5e1" : "#334155";
+      tdName.innerText = sch.name || "";
+      
+      const tdDays = document.createElement("td");
+      tdDays.style.padding = "12px 16px";
+      tdDays.style.color = isDark ? "#94a3b8" : "#475569";
+      tdDays.innerText = (sch.days || "").toString();
+      
+      const tdTime = document.createElement("td");
+      tdTime.style.padding = "12px 16px";
+      tdTime.style.color = isDark ? "#94a3b8" : "#475569";
+      tdTime.innerText = sch.time || "";
+      
+      const tdLink = document.createElement("td");
+      tdLink.style.padding = "12px 16px";
+      if (sch.link) {
+        const absMeetLink = ensureAbsoluteUrl(sch.link);
+        tdLink.innerHTML = `<a href="${absMeetLink}" target="_blank" style="color: #60a5fa; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">🔗 Vào Lớp <span style="font-size: 0.75rem; color: ${isDark ? '#94a3b8' : '#64748b'};">(${sch.link.substring(0,25)}...)</span></a>`;
+      } else {
+        tdLink.innerHTML = `<span style="color:#94a3b8; font-style:italic;">Chưa có link</span>`;
+      }
+      
+      const tdColor = document.createElement("td");
+      tdColor.style.padding = "12px 16px";
+      tdColor.style.textAlign = "center";
+      tdColor.innerHTML = `<div style="width: 24px; height: 24px; border-radius: 50%; background: ${sch.color || '#3b82f6'}; margin: 0 auto; border: 1px solid rgba(0,0,0,0.1); box-shadow: inset 0 0 2px rgba(0,0,0,0.2);"></div>`;
+      
+      const tdActions = document.createElement("td");
+      tdActions.style.padding = "12px 16px";
+      tdActions.style.textAlign = "center";
+      tdActions.style.display = "flex";
+      tdActions.style.justifyContent = "center";
+      tdActions.style.gap = "6px";
+      
+      const editBtn = document.createElement("button");
+      editBtn.style.padding = "4px 8px";
+      editBtn.style.backgroundColor = isDark ? "#1e293b" : "#eff6ff";
+      editBtn.style.color = isDark ? "#60a5fa" : "#2563eb";
+      editBtn.style.border = isDark ? "1px solid #3b82f6" : "1px solid #bfdbfe";
+      editBtn.style.borderRadius = "4px";
+      editBtn.style.cursor = "pointer";
+      editBtn.style.fontSize = "0.8rem";
+      editBtn.style.fontWeight = "600";
+      editBtn.innerText = "Sửa";
+      editBtn.onclick = () => showAdminScheduleForm(sch);
+      
+      const cloneBtn = document.createElement("button");
+      cloneBtn.style.padding = "4px 8px";
+      cloneBtn.style.backgroundColor = isDark ? "#1e293b" : "#f0fdf4";
+      cloneBtn.style.color = isDark ? "#4ade80" : "#166534";
+      cloneBtn.style.border = isDark ? "1px solid #22c55e" : "1px solid #bbf7d0";
+      cloneBtn.style.borderRadius = "4px";
+      cloneBtn.style.cursor = "pointer";
+      cloneBtn.style.fontSize = "0.8rem";
+      cloneBtn.style.fontWeight = "600";
+      cloneBtn.innerText = "Nhân bản";
+      cloneBtn.onclick = () => showAdminScheduleForm(sch, true);
+      
+      const delBtn = document.createElement("button");
+      delBtn.style.padding = "4px 8px";
+      delBtn.style.backgroundColor = isDark ? "#7f1d1d" : "#fef2f2";
+      delBtn.style.color = isDark ? "#fca5a5" : "#dc2626";
+      delBtn.style.border = isDark ? "1px solid #f87171" : "1px solid #fecaca";
+      delBtn.style.borderRadius = "4px";
+      delBtn.style.cursor = "pointer";
+      delBtn.style.fontSize = "0.8rem";
+      delBtn.style.fontWeight = "600";
+      delBtn.innerText = "Xóa";
+      delBtn.onclick = () => deleteAdminSchedule(sch.code, sch.rowId);
+      
+      tdActions.appendChild(cloneBtn);
+      tdActions.appendChild(editBtn);
+      tdActions.appendChild(delBtn);
+      
+      tr.appendChild(tdCode);
+      tr.appendChild(tdName);
+      tr.appendChild(tdDays);
+      tr.appendChild(tdTime);
+      tr.appendChild(tdLink);
+      tr.appendChild(tdColor);
+      tr.appendChild(tdActions);
+      
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function showAdminScheduleForm(editSched = null, isClone = false, prefillData = null) {
+  const form = document.getElementById("adminScheduleFormContainer");
+  const title = document.getElementById("adminScheduleFormTitle");
+  const codeInput = document.getElementById("sched_code");
+  const nameInput = document.getElementById("sched_name");
+  const daysInput = document.getElementById("sched_days");
+  const timeInput = document.getElementById("sched_time");
+  const linkInput = document.getElementById("sched_link");
+  const colorInput = document.getElementById("sched_color");
+  
+  if (!form) return;
+  form.style.display = "block";
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  if (editSched) {
+    if (isClone) {
+      editingSchedRowId = null;
+      title.innerText = "📋 Nhân Bản Lịch Học Lớp";
+      codeInput.value = editSched.code || "";
+      codeInput.disabled = false;
+      codeInput.style.backgroundColor = isDark ? "#0f172a" : "white";
+      codeInput.style.color = isDark ? "#f8fafc" : "#1e293b";
+      codeInput.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+    } else {
+      editingSchedRowId = editSched.rowId || null;
+      title.innerText = "📝 Chỉnh Sửa Lịch Học Lớp";
+      codeInput.value = editSched.code || "";
+      codeInput.disabled = true;
+      codeInput.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9";
+      codeInput.style.color = isDark ? "#94a3b8" : "#475569";
+      codeInput.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+    }
+    
+    nameInput.value = editSched.name || "";
+    
+    const daysStr = editSched.days ? editSched.days.toString() : "";
+    let initialDays = daysStr.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+    
+    selectedDays = [];
+    initialDays.forEach(d => {
+      let cleaned = d.replace(/^thứ\s*/i, "").replace(/^t/i, "").trim();
+      if (cleaned === "cn" || cleaned === "chủ nhật" || cleaned === "8" || cleaned === "sunday") {
+        selectedDays.push("8");
+      } else {
+        const num = parseInt(cleaned);
+        if (num >= 2 && num <= 7) {
+          selectedDays.push(num.toString());
+        }
+      }
+    });
+    selectedDays = [...new Set(selectedDays)].sort((a, b) => parseInt(a) - parseInt(b));
+    daysInput.value = selectedDays.join(",");
+    updateSchedDayButtonsUI();
+    
+    timeInput.value = editSched.time || "";
+    linkInput.value = editSched.link || "";
+    colorInput.value = editSched.color || "#3b82f6";
+  } else if (prefillData) {
+    editingSchedRowId = null;
+    title.innerText = `📅 Thêm Buổi Học Cho Lớp ${prefillData.code}`;
+    codeInput.value = prefillData.code || "";
+    codeInput.disabled = true;
+    codeInput.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9";
+    codeInput.style.color = isDark ? "#94a3b8" : "#475569";
+    codeInput.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+    
+    nameInput.value = prefillData.name || "";
+    
+    selectedDays = [];
+    daysInput.value = "";
+    updateSchedDayButtonsUI();
+    
+    timeInput.value = "";
+    linkInput.value = "";
+    colorInput.value = prefillData.color || "#10b981";
+  } else {
+    editingSchedRowId = null;
+    title.innerText = "📅 Thêm Lịch Học Mới";
+    codeInput.value = "";
+    codeInput.disabled = false;
+    codeInput.style.backgroundColor = isDark ? "#0f172a" : "white";
+    codeInput.style.color = isDark ? "#f8fafc" : "#1e293b";
+    codeInput.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+    nameInput.value = "";
+    
+    selectedDays = [];
+    daysInput.value = "";
+    updateSchedDayButtonsUI();
+    
+    timeInput.value = "";
+    linkInput.value = "";
+    colorInput.value = "#10b981";
+  }
+}
+
+function hideAdminScheduleForm() {
+  const form = document.getElementById("adminScheduleFormContainer");
+  if (form) form.style.display = "none";
+}
+
+function saveAdminSchedule() {
+  const code = document.getElementById("sched_code").value.trim().toUpperCase();
+  const name = document.getElementById("sched_name").value.trim();
+  const days = document.getElementById("sched_days").value.trim();
+  const time = document.getElementById("sched_time").value.trim();
+  const link = document.getElementById("sched_link").value.trim();
+  const color = document.getElementById("sched_color").value;
+  
+  if (!code || !name || !days || !time) {
+    showToast("Vui lòng nhập đầy đủ các trường bắt buộc (Mã, Tên, Lịch Thứ, Giờ Học)!", "error");
+    return;
+  }
+  
+  const schObj = { rowId: editingSchedRowId, code, name, days, time, link, color };
+  
+  if (typeof google === 'undefined') {
+    // Mock save
+    const idx = adminSchedulesData.findIndex(s => s.rowId === editingSchedRowId && editingSchedRowId !== null);
+    if (idx !== -1) {
+      adminSchedulesData[idx] = { ...schObj, rowId: editingSchedRowId };
+    } else {
+      adminSchedulesData.push({ ...schObj, rowId: Date.now() });
+    }
+    
+    showToast("Đã lưu lịch học thành công (Mock)!", "success");
+    hideAdminScheduleForm();
+    renderAdminSchedules(adminSchedulesData);
+    userClassSchedules = adminSchedulesData;
+    renderCalendar();
+    renderDailyTasks();
+    return;
+  }
+  
+  showToast("Đang lưu...", "info");
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        showToast(res.message || "Đã lưu lịch học thành công!", "success");
+        hideAdminScheduleForm();
+        loadAdminSchedules(); // Reload table
+        loadUserClassSchedules(); // Refresh student view
+      } else {
+        showToast("Lỗi: " + (res ? res.message : "Không xác định"), "error");
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast("Lỗi kết nối Server khi lưu!", "error");
+    })
+    .saveClassSchedule(schObj);
+}
+
+function deleteAdminSchedule(code, rowId) {
+  showConfirmModal(
+    "Xác nhận xóa",
+    `Bạn có chắc chắn muốn xóa buổi học này? Hành động này không thể hoàn tác.`,
+    () => {
+      if (typeof google === 'undefined') {
+        adminSchedulesData = adminSchedulesData.filter(s => s.rowId !== rowId);
+        showToast("Đã xóa thành công (Mock)!", "success");
+        renderAdminSchedules(adminSchedulesData);
+        userClassSchedules = adminSchedulesData;
+        renderCalendar();
+        renderDailyTasks();
+        return;
+      }
+      
+      showToast("Đang xóa...", "info");
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.success) {
+            showToast(res.message || "Đã xóa lịch học thành công!", "success");
+            loadAdminSchedules();
+            loadUserClassSchedules();
+          } else {
+            showToast("Lỗi: " + (res ? res.message : "Không xác định"), "error");
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast("Lỗi kết nối Server khi xóa!", "error");
+        })
+        .deleteClassSchedule(code, rowId);
+    },
+    '🗑️',
+    'Xóa ngay'
+  );
+}
+
+function filterAdminSchedules() {
+  const query = document.getElementById("adminScheduleSearch").value.trim().toLowerCase();
+  if (!query) {
+    renderAdminSchedules(adminSchedulesData);
+    return;
+  }
+  
+  const filtered = adminSchedulesData.filter(sch => 
+    (sch.code || "").toLowerCase().includes(query) ||
+    (sch.name || "").toLowerCase().includes(query) ||
+    (sch.days || "").toString().toLowerCase().includes(query) ||
+    (sch.time || "").toLowerCase().includes(query)
+  );
+  renderAdminSchedules(filtered);
+}
+
+let isSchedAutocompleteInited = false;
+function initScheduleAutocomplete() {
+  if (isSchedAutocompleteInited) return;
+  const codeInput = document.getElementById("sched_code");
+  if (codeInput) {
+    codeInput.addEventListener("input", function() {
+      if (editingSchedRowId !== null) return; // Only autocomplete when adding new
+      const enteredCode = this.value.trim().toUpperCase();
+      if (!enteredCode) return;
+      
+      const matched = adminSchedulesData.find(s => (s.code || "").toString().trim().toUpperCase() === enteredCode);
+      if (matched) {
+        const nameInput = document.getElementById("sched_name");
+        const colorInput = document.getElementById("sched_color");
+        if (nameInput) nameInput.value = matched.name || "";
+        if (colorInput) colorInput.value = matched.color || "#10b981";
+      }
+    });
+    isSchedAutocompleteInited = true;
+  }
+}
+
+// Register globally so onclick attributes can resolve them
+let selectedDays = [];
+let editingSchedRowId = null;
+
+function toggleSchedDay(day) {
+  const index = selectedDays.indexOf(day);
+  if (index > -1) {
+    selectedDays.splice(index, 1);
+  } else {
+    selectedDays.push(day);
+  }
+  
+  // Sắp xếp các thứ tăng dần từ 2 đến 8 (Chủ Nhật)
+  selectedDays.sort((a, b) => parseInt(a) - parseInt(b));
+  
+  const daysInput = document.getElementById("sched_days");
+  if (daysInput) {
+    daysInput.value = selectedDays.join(",");
+  }
+  updateSchedDayButtonsUI();
+}
+
+function updateSchedDayButtonsUI() {
+  const isDark = document.body.classList.contains("dark-mode");
+  const btns = document.querySelectorAll(".sched-day-btn");
+  btns.forEach(btn => {
+    const day = btn.getAttribute("data-day");
+    if (selectedDays.includes(day)) {
+      btn.style.background = "#10b981";
+      btn.style.color = "white";
+      btn.style.borderColor = "#10b981";
+      btn.style.boxShadow = "0 2px 4px rgba(16, 185, 129, 0.2)";
+    } else {
+      btn.style.background = isDark ? "#1e293b" : "white";
+      btn.style.color = isDark ? "#cbd5e1" : "#475569";
+      btn.style.borderColor = isDark ? "#334155" : "#cbd5e1";
+      btn.style.boxShadow = "none";
+    }
+  });
+}
+
+window.toggleSchedDay = toggleSchedDay;
+window.updateSchedDayButtonsUI = updateSchedDayButtonsUI;
+
+window.getClassSchedulesForDate = getClassSchedulesForDate;
+window.loadUserClassSchedules = loadUserClassSchedules;
+window.loadAdminSchedules = loadAdminSchedules;
+window.renderAdminSchedules = renderAdminSchedules;
+window.showAdminScheduleForm = showAdminScheduleForm;
+window.hideAdminScheduleForm = hideAdminScheduleForm;
+window.saveAdminSchedule = saveAdminSchedule;
+window.deleteAdminSchedule = deleteAdminSchedule;
+window.filterAdminSchedules = filterAdminSchedules;
+
+</script>

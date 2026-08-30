@@ -1,0 +1,2982 @@
+<script>
+// ==========================================
+// ADMIN DASHBOARD & CONTROLS
+// ==========================================
+
+var adminUsersData = [];
+var adminMonitorData = [];
+
+function switchAdminTab(tab) {
+  document.getElementById('adminTabContent_users').style.display = tab === 'users' ? 'block' : 'none';
+  document.getElementById('adminTabContent_qa').style.display = tab === 'qa' ? 'block' : 'none';
+  document.getElementById('adminTabContent_vip').style.display = tab === 'vip' ? 'block' : 'none';
+  if (document.getElementById('adminTabContent_monitor')) {
+    document.getElementById('adminTabContent_monitor').style.display = tab === 'monitor' ? 'block' : 'none';
+  }
+  
+  const usersBtn = document.getElementById('adminTabBtn_users');
+  const qaBtn = document.getElementById('adminTabBtn_qa');
+  const vipBtn = document.getElementById('adminTabBtn_vip');
+  const monitorBtn = document.getElementById('adminTabBtn_monitor');
+  
+  if (usersBtn) usersBtn.classList.remove('active');
+  if (qaBtn) qaBtn.classList.remove('active');
+  if (vipBtn) vipBtn.classList.remove('active');
+  if (monitorBtn) monitorBtn.classList.remove('active');
+  
+  if (tab === 'users') {
+    if (usersBtn) usersBtn.classList.add('active');
+  } else if (tab === 'qa') {
+    if (qaBtn) qaBtn.classList.add('active');
+  } else if (tab === 'vip') {
+    if (vipBtn) vipBtn.classList.add('active');
+  } else if (tab === 'monitor') {
+    if (monitorBtn) monitorBtn.classList.add('active');
+  }
+  
+  if (usersBtn) {
+    usersBtn.style.background = tab === 'users' ? 'white' : 'transparent';
+    usersBtn.style.color = tab === 'users' ? '#3b82f6' : '#64748b';
+    usersBtn.style.fontWeight = tab === 'users' ? 'bold' : 'normal';
+  }
+
+  if (qaBtn) {
+    qaBtn.style.background = tab === 'qa' ? 'white' : 'transparent';
+    qaBtn.style.color = tab === 'qa' ? '#3b82f6' : '#64748b';
+    qaBtn.style.fontWeight = tab === 'qa' ? 'bold' : 'normal';
+  }
+  
+  if (vipBtn) {
+    vipBtn.style.background = tab === 'vip' ? 'white' : 'transparent';
+    vipBtn.style.color = tab === 'vip' ? '#3b82f6' : '#64748b';
+    vipBtn.style.fontWeight = tab === 'vip' ? 'bold' : 'normal';
+  }
+
+  if (monitorBtn) {
+    monitorBtn.style.background = tab === 'monitor' ? 'white' : 'transparent';
+    monitorBtn.style.color = tab === 'monitor' ? '#3b82f6' : '#64748b';
+    monitorBtn.style.fontWeight = tab === 'monitor' ? 'bold' : 'normal';
+  }
+  
+  if (tab === 'qa') {
+    loadAdminRecentQA();
+  } else if (tab === 'vip') {
+    loadAdminUsersData();
+  } else if (tab === 'monitor') {
+    loadAdminMonitorData();
+  }
+}
+
+window.getAdminSpinnerHTML = function(text = "Đang tải dữ liệu...", isTable = false, colspan = 4, size = 36) {
+  const borderSize = size > 30 ? 3.5 : 2.5;
+  const innerHTML = `
+    <div class="admin-loading-wrapper" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; width: 100%; grid-column: 1 / -1;">
+      <div class="admin-spinner" style="width: ${size}px; height: ${size}px; border: ${borderSize}px solid rgba(148, 163, 184, 0.15); border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; display: block;"></div>
+      <div style="color: #64748b; font-size: 0.9rem; font-weight: 500; margin-top: 4px;">${text}</div>
+    </div>
+  `;
+  if (isTable) {
+    return `<tr><td colspan="${colspan}" style="padding: 20px; text-align: center;">${innerHTML}</td></tr>`;
+  }
+  return innerHTML;
+};
+
+function loadAdminMonitorData(isSilent = false) {
+  const tbody = document.getElementById('adminMonitorTableBody');
+  if (tbody && !isSilent) tbody.innerHTML = getAdminSpinnerHTML("Đang tải danh sách giám sát phiên học...", true, 4);
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        adminMonitorData = res.data || [];
+        filterAdminMonitor();
+      } else {
+        if (!isSilent && tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Lỗi tải dữ liệu: ${res ? res.message : 'Lỗi không xác định'}</td></tr>`;
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (!isSilent && tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Lỗi kết nối Server</td></tr>`;
+    })
+    .adminGetMonitorSessions();
+}
+
+function renderAdminMonitorList(data) {
+  const tbody = document.getElementById('adminMonitorTableBody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '';
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #94a3b8;">Không có dữ liệu giám sát nào được lưu trữ.</td></tr>`;
+    return;
+  }
+  
+  data.forEach(function(item) {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = "1px solid #f1f5f9";
+    
+    // Formatting duration
+    let durationText = `${item.duration} phút`;
+    if (item.duration === 0) {
+      durationText = `<span style="color: #94a3b8; font-style: italic;">Dưới 1 phút</span>`;
+    } else {
+      durationText = `<strong style="color: #0f172a;">${item.duration}</strong> phút`;
+    }
+    
+    tr.innerHTML = `
+      <td style="padding: 12px 16px;">
+        <div style="font-weight: bold; color: #1e293b; font-size: 0.95rem;">${item.email}</div>
+      </td>
+      <td style="padding: 12px 16px; color: #64748b; font-size: 0.85rem;">
+        ${item.start}
+      </td>
+      <td style="padding: 12px 16px; color: #64748b; font-size: 0.85rem;">
+        ${item.end}
+      </td>
+      <td style="padding: 12px 16px; font-size: 0.9rem;">
+        ${durationText}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterAdminMonitor() {
+  const searchText = (document.getElementById('adminSearchMonitor')?.value || "").toLowerCase().trim();
+  if (!searchText) {
+    renderAdminMonitorList(adminMonitorData);
+    return;
+  }
+  
+  const filtered = adminMonitorData.filter(function(item) {
+    return item.email.toLowerCase().includes(searchText);
+  });
+  renderAdminMonitorList(filtered);
+}
+
+// === Bộ lọc và xuất file báo cáo giám sát theo giờ học tập ===
+
+function parseVietnameseDate(str) {
+  if (!str || str === "N/A" || typeof str !== 'string') return null;
+  try {
+    const parts = str.trim().split(/[\s/:]+/);
+    if (parts.length >= 5) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      const hour = parseInt(parts[3], 10);
+      const min = parseInt(parts[4], 10);
+      const sec = parts[5] ? parseInt(parts[5], 10) : 0;
+      return new Date(year, month, day, hour, min, sec);
+    }
+  } catch (e) {}
+  const parsed = Date.parse(str);
+  if (!isNaN(parsed)) return new Date(parsed);
+  return null;
+}
+
+function getFilteredMonitorSessions() {
+  const dateValStr = document.getElementById("adminMonitorFilterDate").value; // YYYY-MM-DD
+  const timeStart = document.getElementById("adminMonitorFilterTimeStart").value; // HH:MM
+  const timeEnd = document.getElementById("adminMonitorFilterTimeEnd").value; // HH:MM
+  
+  if (!dateValStr) {
+    return adminMonitorData;
+  }
+  
+  const startTimeStr = timeStart || "00:00";
+  const endTimeStr = timeEnd || "23:59";
+  
+  const filterStart = new Date(`${dateValStr}T${startTimeStr}:00`);
+  const filterEnd = new Date(`${dateValStr}T${endTimeStr}:59`);
+  
+  return adminMonitorData.filter(function(item) {
+    const sDate = parseVietnameseDate(item.start);
+    let eDate = parseVietnameseDate(item.end);
+    
+    if (!eDate) {
+      eDate = new Date(); // assume session still running
+    }
+    
+    if (!sDate) return false;
+    
+    // Giao khoảng logic: S <= filterEnd && E >= filterStart
+    if (eDate < filterStart) {
+      return false; // ended before selection started
+    }
+    if (sDate > filterEnd) {
+      return false; // started after selection ended
+    }
+    return true;
+  });
+}
+
+function applyMonitorTimeFilter() {
+  const dateValStr = document.getElementById("adminMonitorFilterDate").value;
+  const timeStart = document.getElementById("adminMonitorFilterTimeStart").value;
+  const timeEnd = document.getElementById("adminMonitorFilterTimeEnd").value;
+  
+  if (!dateValStr) {
+    showToast("Vui lòng chọn một Ngày học tập cụ thể cần lọc!", "info");
+    return;
+  }
+  
+  if (timeStart && timeEnd) {
+    // Compare time strings directly since they are HH:MM
+    if (timeEnd < timeStart) {
+      showToast("Cảnh báo: Giờ Tắt không thể sớm hơn giờ Bật!", "error");
+      return;
+    }
+  }
+  
+  const filtered = getFilteredMonitorSessions();
+  renderAdminMonitorList(filtered);
+  showToast(`Tìm thấy ${filtered.length} phiên phù hợp trong ngày ${dateValStr}!`, "success");
+}
+
+function clearMonitorTimeFilter() {
+  document.getElementById("adminMonitorFilterDate").value = "";
+  document.getElementById("adminMonitorFilterTimeStart").value = "19:30";
+  document.getElementById("adminMonitorFilterTimeEnd").value = "22:00";
+  renderAdminMonitorList(adminMonitorData);
+  showToast("Đã xóa bộ lọc, hiển thị tất cả các phiên", "info");
+}
+
+let cleanupTimeouts = null;
+let cleanupConfirmed = false;
+
+function cleanupOldMonitorSessions() {
+  const btn = document.querySelector('button[onclick="cleanupOldMonitorSessions()"]');
+  if (!btn) return;
+  
+  if (!cleanupConfirmed) {
+    cleanupConfirmed = true;
+    btn.style.background = "#dc2626";
+    btn.innerHTML = "⚠️ Xác nhận dọn dẹp?";
+    showToast("Nhấn thêm một lần nữa để xác nhận xóa toàn bộ log cũ hơn 30 ngày!", "warning");
+    
+    cleanupTimeouts = setTimeout(function() {
+      cleanupConfirmed = false;
+      btn.style.background = "#ef4444";
+      btn.innerHTML = "🧹 Dọn dẹp log > 30 ngày";
+    }, 5000);
+    return;
+  }
+  
+  clearTimeout(cleanupTimeouts);
+  cleanupConfirmed = false;
+  btn.style.background = "#ef4444";
+  btn.innerHTML = "🧹 Dọn dẹp log > 30 ngày";
+  
+  showToast("⏳ Đang tiến hành dọn dẹp các phiên hoạt động cũ...", "info");
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        showToast(res.message, "success");
+        loadAdminMonitorData(true);
+      } else {
+        showToast(res ? res.message : "Có lỗi xảy ra", "error");
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast("Lỗi kết nối Server: " + err.toString(), "error");
+    })
+    .adminCleanupOldMonitorSessions();
+}
+
+
+
+function exportMonitorCsvFiltered() {
+  const dateValStr = document.getElementById("adminMonitorFilterDate").value;
+  const timeStart = document.getElementById("adminMonitorFilterTimeStart").value;
+  const timeEnd = document.getElementById("adminMonitorFilterTimeEnd").value;
+  
+  if (dateValStr && timeStart && timeEnd) {
+    if (timeEnd < timeStart) {
+      showToast("Cảnh báo: Giờ Tắt không thể sớm hơn giờ Bật!", "error");
+      return;
+    }
+  }
+
+  const filtered = getFilteredMonitorSessions();
+  if (filtered.length === 0) {
+    showToast("Không có dữ liệu phù hợp để xuất file!", "error");
+    return;
+  }
+  
+  let csvContent = "\ufeff"; // BOM UTF-8 for Excel compatibility
+  csvContent += "Email học viên,Thời gian bắt đầu,Thời gian kết thúc,Thời lượng (phút)\r\n";
+  
+  filtered.forEach(function(item) {
+    const emailStr = `"${item.email.replace(/"/g, '""')}"`;
+    const startStr = `"${item.start.replace(/"/g, '""')}"`;
+    const endStr = `"${item.end.replace(/"/g, '""')}"`;
+    const durationStr = item.duration;
+    
+    csvContent += `${emailStr},${startStr},${endStr},${durationStr}\r\n`;
+  });
+  
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  
+  let filename = "Bao_Cao_Giam_Sat";
+  if (dateValStr) {
+    filename += `_Ngay_${dateValStr}`;
+    if (timeStart && timeEnd) {
+      filename += `_${timeStart.replace(':', 'h')}_den_${timeEnd.replace(':', 'h')}`;
+    }
+  } else {
+    filename += "_Tat_Ca";
+  }
+  filename += ".csv";
+  
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  showToast(`Đã xuất file báo cáo ${filtered.length} phiên thành công!`, "success");
+}
+
+function generateFakeMonitorSessions() {
+  showToast("⏳ Đang tạo/đặt lại dữ liệu học tập thử nghiệm...", "info");
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.success) {
+        showToast(res.message, "success");
+        loadAdminMonitorData(true);
+      } else {
+        showToast(res ? res.message : "Có lỗi xảy ra", "error");
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast("Lỗi kết nối Server: " + err.toString(), "error");
+    })
+    .adminCreateFakeMonitorSessions();
+}
+
+window.adminStatsUnlocked = false;
+window.cachedAdminStats = null;
+
+window.updateAdminStatsUI = function() {
+  if (window.isAdminSystemAuthorized) {
+    window.adminStatsUnlocked = true;
+  }
+
+  const statTotalUsersElem = document.getElementById('adminStatTotalUsers');
+  const statStudentsElem = document.getElementById('adminStatStudents');
+  const statCoinsElem = document.getElementById('adminStatCoins');
+  const statsBox = document.getElementById('adminStatsBox');
+  const unlockBtn = document.getElementById('adminStatsUnlockBtn');
+  const reloadBtn = document.getElementById('adminStatsReloadBtn');
+
+  if (!window.cachedAdminStats) {
+    if (statTotalUsersElem) statTotalUsersElem.innerText = '--';
+    if (statStudentsElem) statStudentsElem.innerText = '--';
+    if (statCoinsElem) statCoinsElem.innerText = '--';
+    return;
+  }
+
+  if (window.adminStatsUnlocked) {
+    if (statTotalUsersElem) statTotalUsersElem.innerText = window.cachedAdminStats.total;
+    if (statStudentsElem) statStudentsElem.innerText = window.cachedAdminStats.studentsCount;
+    if (statCoinsElem) statCoinsElem.innerText = window.cachedAdminStats.totalCoins.toLocaleString();
+    if (unlockBtn) unlockBtn.style.display = 'none';
+    if (reloadBtn) reloadBtn.style.display = 'inline-block';
+    if (statsBox) {
+      statsBox.style.filter = 'none';
+      statsBox.style.pointerEvents = 'auto';
+    }
+  } else {
+    if (statTotalUsersElem) statTotalUsersElem.innerText = '***';
+    if (statStudentsElem) statStudentsElem.innerText = '***';
+    if (statCoinsElem) statCoinsElem.innerText = '***';
+    if (unlockBtn) unlockBtn.style.display = 'flex';
+    if (reloadBtn) reloadBtn.style.display = 'none';
+    if (statsBox) {
+      statsBox.style.filter = 'blur(4px)';
+      statsBox.style.pointerEvents = 'none';
+    }
+  }
+};
+
+window.requestUnlockStats = function() {
+  if (window.isAdminSystemAuthorized) {
+    window.adminStatsUnlocked = true;
+    window.updateAdminStatsUI();
+    return;
+  }
+  
+  window.adminTargetSubTab = null;
+  window.passcodeBypassCallback = () => {
+    window.adminStatsUnlocked = true;
+    window.updateAdminStatsUI();
+  };
+  window.showAdminPasscodePrompt();
+};
+
+function loadAdminUsersData(isSilent = false) {
+  const tbody = document.getElementById('adminUsersTableBody');
+  if (tbody && !isSilent) tbody.innerHTML = getAdminSpinnerHTML("Đang tải danh sách học viên...", true, 5);
+  
+  const viptbody = document.getElementById('adminVipTableBody');
+  if (viptbody && !isSilent) viptbody.innerHTML = getAdminSpinnerHTML("Đang tải yêu cầu nâng VIP...", true, 4);
+
+  google.script.run.withSuccessHandler(function(res) {
+    if (res.success) {
+      adminUsersData = res.data;
+      
+      const total = adminUsersData.length;
+      const studentsCount = adminUsersData.filter(u => u.role === 'STUDENT' || u.role === 'S-STUDENT' || u.role === 'O-STUDENT').length;
+      const totalCoins = adminUsersData.reduce((sum, u) => sum + (Number(u.points) || 0), 0);
+      
+      const totalUsersElem = document.getElementById('adminTotalUsers');
+      if (totalUsersElem) totalUsersElem.innerText = total;
+      
+      window.cachedAdminStats = {
+        total: total,
+        studentsCount: studentsCount,
+        totalCoins: totalCoins
+      };
+      window.updateAdminStatsUI();
+      
+      filterAdminUsers();
+      renderAdminVipRequests(adminUsersData);
+    } else {
+      if (!isSilent) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: red;">Lỗi tải dữ liệu: ${res.message}</td></tr>`;
+        if (viptbody) viptbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Lỗi tải dữ liệu: ${res.message}</td></tr>`;
+      }
+    }
+  }).withFailureHandler(function(err) {
+    if (!isSilent) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: red;">Lỗi kết nối Server</td></tr>`;
+      if (viptbody) viptbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Lỗi kết nối Server</td></tr>`;
+    }
+  }).getAllUsersForAdmin();
+}
+
+window.loadAdminVipRequests = function(isSilent = false) {
+  loadAdminUsersData(isSilent);
+};
+
+function renderAdminUsers(data) {
+  const tbody = document.getElementById('adminUsersTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Không tìm thấy kết quả</td></tr>`;
+    return;
+  }
+  
+  data.forEach((u) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = "1px solid #f1f5f9";
+    
+    let roleColor = "#94a3b8";
+    let roleText = u.role || 'MEM';
+    if (u.role === 'ADMIN') { roleColor = '#000'; roleText = '🛡️ ADMIN'; }
+    else if (u.role === 'VIP') { roleColor = '#f59e0b'; roleText = '👑 VIP'; }
+    else if (u.role === 'S-STUDENT') { roleColor = '#10b981'; roleText = '⭐ S-STU'; }
+    else if (u.role === 'O-STUDENT') { roleColor = '#10b981'; roleText = '🧑‍🎓 O-STU'; }
+    else if (u.role === 'STUDENT') { roleColor = '#3b82f6'; roleText = '🎓 STU'; }
+    
+    const displayDaysAgo = u.daysAgo ? ` (${u.daysAgo})` : '';
+    
+    tr.innerHTML = `
+      <td style="padding: 12px 16px;">
+        <div style="font-weight: bold; color: #1e293b;">${u.name || 'Chưa có tên'}</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;">⌛ HĐ: ${u.lastActive || 'N/A'}${displayDaysAgo}</div>
+        <div style="font-size: 0.8rem; color: #0284c7; font-weight: 500; margin-top: 2px;">${u.deviceType || 'Chưa rõ'}</div>
+      </td>
+      <td style="padding: 12px 16px; color: #475569;">${u.email}</td>
+      <td style="padding: 12px 16px; font-weight: bold; color: #f59e0b;">${Number(u.points).toLocaleString()}</td>
+      <td style="padding: 12px 16px;">
+        <span style="background: ${roleColor}20; color: ${roleColor}; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">
+          ${roleText}
+        </span>
+      </td>
+      <td style="padding: 12px 16px; text-align: right;">
+        <button onclick="editAdminUser('${u.email}')" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3b82f6; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold;" title="Sửa Role/Coin">Chỉnh Sửa</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAdminVipRequests(data) {
+  const tbody = document.getElementById('adminVipTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  
+  // Lọc lấy các user có vipStatus bắt đầu bằng "Đã gửi"
+  const pending = data.filter(u => u.vipStatus && u.vipStatus.toLowerCase().startsWith("đã gửi"));
+  
+  if (pending.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #94a3b8;">Không có yêu cầu nâng cấp nào đang chờ xử lý.</td></tr>`;
+    return;
+  }
+  
+  pending.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = "1px solid #f1f5f9";
+    
+    let noteHtml = u.vipNote ? u.vipNote.replace(/\n/g, '<br>') : 'Không có ghi chú';
+    
+    let displayStatus = u.vipStatus;
+    const lowerVipStatus = (u.vipStatus || "").toLowerCase();
+    if (lowerVipStatus.includes("vip_10000")) {
+      displayStatus = "💎 VIP 10000 🪙 (Chắc chắn)";
+    } else if (lowerVipStatus.includes("lucky_1000")) {
+      displayStatus = "🎲 Quay số VIP 1000 🪙";
+    } else if (lowerVipStatus.includes("support")) {
+      displayStatus = "🍚 Góp Gạo Thổi Cơm";
+    } else if (lowerVipStatus.includes("fan")) {
+      displayStatus = "🔥 Fan Cứng Fanpage";
+    } else if (lowerVipStatus.includes("sstudent") || lowerVipStatus.includes("s-student") || lowerVipStatus.includes("ostudent") || lowerVipStatus.includes("o-student")) {
+      displayStatus = "⭐ Yêu cầu S-STUDENT (Miễn phí)";
+    }
+    
+    const displayDaysAgo = u.daysAgo ? ` (${u.daysAgo})` : '';
+    
+    let actionsHtml = `
+      <button onclick="approveVipRequest('${u.email}', 'VIP')" style="background: #10b981; border: none; color: white; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem;" title="Duyệt VIP">Duyệt VIP 👑</button>
+      <button onclick="rejectVipRequest('${u.email}')" style="background: #ef4444; border: none; color: white; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem;" title="Từ chối">Từ chối ❌</button>
+    `;
+
+    if (lowerVipStatus.includes("sstudent") || lowerVipStatus.includes("s-student") || lowerVipStatus.includes("ostudent") || lowerVipStatus.includes("o-student")) {
+      actionsHtml = `
+        <button onclick="approveVipRequest('${u.email}', 'S-STUDENT')" style="background: #10b981; border: none; color: white; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem;" title="Duyệt S-STUDENT">Duyệt S-STU ⭐</button>
+        <button onclick="rejectVipRequest('${u.email}')" style="background: #ef4444; border: none; color: white; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem;" title="Từ chối">Từ chối ❌</button>
+      `;
+    }
+
+    tr.innerHTML = `
+      <td style="padding: 12px 16px;">
+        <div style="font-weight: bold; color: #1e293b;">${u.name || 'Chưa có tên'}</div>
+        <div style="font-size: 0.8rem; color: #94a3b8;">Email: ${u.email}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">
+          HĐ cuối: ${u.lastActive || 'N/A'}${displayDaysAgo}
+        </div>
+      </td>
+      <td style="padding: 12px 16px; color: #3b82f6; font-weight: 600;">
+        ${displayStatus}
+      </td>
+      <td style="padding: 12px 16px; color: #475569; font-size: 0.85rem; max-width: 300px; word-wrap: break-word; white-space: normal;">
+        ${noteHtml}
+      </td>
+      <td style="padding: 12px 16px; text-align: right; vertical-align: middle;">
+        <div style="display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
+          ${actionsHtml}
+        </div>
+      </td>
+    `;
+    
+    tbody.appendChild(tr);
+  });
+}
+
+function approveVipRequest(email, role) {
+  showConfirmModal(
+    `Phê duyệt ${role} 👑`,
+    `Bạn có chắc chắn muốn duyệt quyền ${role} cho người dùng ${email}?`,
+    () => {
+      showToast("⏳ Đang xử lý phê duyệt...", "info");
+      google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+          showToast(res.message, "success");
+          loadAdminUsersData(true);
+        } else {
+          showToast(res.message, "error");
+        }
+      }).withFailureHandler(function(err) {
+        showToast("Lỗi kết nối", "error");
+      }).adminApproveVip(email, role);
+    },
+    '👑',
+    'Phê duyệt ngay'
+  );
+}
+
+function rejectVipRequest(email) {
+  showConfirmModal(
+    'Từ chối yêu cầu ❌',
+    `Bạn có chắc chắn muốn từ chối yêu cầu nâng cấp VIP của ${email}?`,
+    () => {
+      showToast("⏳ Đang từ chối yêu cầu...", "info");
+      google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+          showToast(res.message, "success");
+          loadAdminUsersData(true);
+        } else {
+          showToast(res.message, "error");
+        }
+      }).withFailureHandler(function(err) {
+        showToast("Lỗi kết nối", "error");
+      }).adminRejectVip(email);
+    },
+    '❌',
+    'Từ chối ngay'
+  );
+}
+
+function filterAdminUsers() {
+  const query = document.getElementById('adminSearchUser').value.toLowerCase();
+  const filtered = adminUsersData.filter(u => 
+    u.email.toLowerCase().includes(query) || 
+    (u.name || "").toLowerCase().includes(query)
+  );
+  renderAdminUsers(filtered);
+}
+
+var currentEditAdminEmail = "";
+var currentEditAdminOriginalRole = "MEM";
+
+function editAdminUser(email) {
+  const user = adminUsersData.find(u => u.email === email);
+  if (!user) return;
+  
+  currentEditAdminEmail = email;
+  const rawRole = (user.role || "MEM").toString().trim().toUpperCase();
+  currentEditAdminOriginalRole = rawRole;
+
+  document.getElementById("adminEditEmailDisplay").innerText = email;
+  
+  const selectElem = document.getElementById("adminEditRole");
+  let optionFound = false;
+  for (let i = 0; i < selectElem.options.length; i++) {
+    if (selectElem.options[i].value.toUpperCase() === rawRole) {
+      selectElem.selectedIndex = i;
+      optionFound = true;
+      break;
+    }
+  }
+  
+  if (!optionFound) {
+    const opt = document.createElement("option");
+    opt.value = rawRole;
+    opt.text = rawRole;
+    opt.selected = true;
+    selectElem.appendChild(opt);
+  }
+  
+  document.getElementById("adminEditPoints").value = Number(user.points) || 0;
+  document.getElementById("adminEditModal").style.display = "flex";
+}
+
+function closeAdminEditModal() {
+  document.getElementById("adminEditModal").style.display = "none";
+  currentEditAdminEmail = "";
+  currentEditAdminOriginalRole = "MEM";
+}
+
+function saveAdminEditUser() {
+  if (!currentEditAdminEmail) return;
+  
+  const roleSelect = document.getElementById("adminEditRole");
+  let newRole = (roleSelect ? roleSelect.value : "").trim().toUpperCase();
+  if (!newRole) {
+    newRole = currentEditAdminOriginalRole || "MEM";
+  }
+  
+  const pointsVal = parseInt(document.getElementById("adminEditPoints").value);
+  const newPoints = isNaN(pointsVal) ? 0 : Math.max(0, pointsVal);
+  
+  const btn = document.getElementById("adminSaveUserBtn");
+  btn.innerHTML = '<div class="spinner" style="width:16px; height:16px; border-width:2px; border-top-color:#fff;"></div> Lưu...';
+  btn.disabled = true;
+  
+  google.script.run.withSuccessHandler(function(res) {
+    btn.innerHTML = '💾 Lưu';
+    btn.disabled = false;
+    
+    if (res.success) {
+      showToast(res.message, "success");
+      closeAdminEditModal();
+      // Reload specific user line immediately or full refresh
+      loadAdminUsersData(true);
+    } else {
+      showToast("Lỗi: " + res.message, "error");
+    }
+  }).withFailureHandler(function(err) {
+    btn.innerHTML = '💾 Lưu';
+    btn.disabled = false;
+    showToast("Lỗi kết nối Server", "error");
+  }).adminUpdateUser(currentEditAdminEmail, newRole, newPoints);
+}
+
+function adminResetDeviceAction() {
+  if (!currentEditAdminEmail) return;
+  
+  const targetEmail = currentEditAdminEmail;
+  
+  showConfirmModal({
+    title: "Mở Khóa Thiết Bị?",
+    message: `Bạn có chắc muốn <b>xóa liên kết máy cũ</b> của học sinh <br><b style="color: #3b82f6;">${targetEmail}</b>?<br><br><span style="font-size: 0.8rem; color: #64748b; line-height: 1.45; display: block;">💡 Sau khi mở khóa, học sinh có thể đăng nhập trên máy tính hoặc iPad mới. Thiết bị mới đăng nhập đầu tiên sẽ tự động được khóa lại.</span>`,
+    icon: "📱",
+    confirmText: "🔓 Mở Khóa Ngay",
+    cancelText: "Hủy bỏ",
+    type: "danger",
+    onConfirm: function() {
+      const btn = document.getElementById("adminResetDeviceBtn");
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.innerHTML = '<div class="spinner" style="width:14px; height:14px; border-width:2px; border-top-color:#fff;"></div> Đang mở khóa...';
+        btn.disabled = true;
+      }
+      
+      google.script.run.withSuccessHandler(function(res) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        if (res.success) {
+          showToast(res.message, "success");
+          closeAdminEditModal();
+          loadAdminUsersData(true);
+        } else {
+          showToast("Lỗi: " + res.message, "error");
+        }
+      }).withFailureHandler(function(err) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        showToast("Lỗi kết nối Server", "error");
+      }).adminResetUserDevice(targetEmail);
+    }
+  });
+}
+
+function adminForceLogoutAction() {
+  if (!currentEditAdminEmail) return;
+  
+  const targetEmail = currentEditAdminEmail;
+  
+  showConfirmModal({
+    title: "Đăng Xuất Bắt Buộc?",
+    message: `Bạn có chắc muốn <b>hủy phiên làm việc ngay lập tức</b> của học sinh <br><b style="color: #3b82f6;">${targetEmail}</b>?<br><br><span style="font-size: 0.8rem; color: #64748b; line-height: 1.45; display: block;">💡 Học sinh này sẽ bị văng ra khỏi hệ thống và yêu cầu phải đăng nhập lại ở lần tương tác tiếp theo.</span>`,
+    icon: "⚡",
+    confirmText: "Đá Phiên Ngay",
+    cancelText: "Hủy bỏ",
+    type: "danger",
+    onConfirm: function() {
+      const btn = document.getElementById("adminForceLogoutBtn");
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.innerHTML = '<div class="spinner" style="width:14px; height:14px; border-width:2px; border-top-color:#fff;"></div> Đang xử lý...';
+        btn.disabled = true;
+      }
+      
+      google.script.run.withSuccessHandler(function(res) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        if (res.success) {
+          showToast(res.message, "success");
+          closeAdminEditModal();
+        } else {
+          showToast("Lỗi: " + res.message, "error");
+        }
+      }).withFailureHandler(function(err) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        showToast("Lỗi kết nối Server", "error");
+      }).adminForceLogoutUser(targetEmail);
+    }
+  });
+}
+
+function adminGlobalForceLogoutAction() {
+  showConfirmModal({
+    title: "Đăng Xuất Toàn Server?",
+    message: `Bạn có thực sự muốn <b>hủy phiên làm việc của TẤT CẢ mọi người</b> trên hệ thống?<br><br><span style="font-size: 0.85rem; color: #b91c1c; font-weight: bold; display: block; margin-top: 5px;">⚠️ Toàn bộ học sinh và giáo viên (trừ bạn) sẽ bị văng ra và phải đăng nhập lại! Hành động này không thể hoàn tác.</span>`,
+    icon: "🛡️",
+    confirmText: "Thực Hiện Đăng Xuất Toàn Bộ",
+    cancelText: "Hủy bỏ",
+    type: "danger",
+    onConfirm: function() {
+      const btn = document.getElementById("btnGlobalForceLogout");
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.innerHTML = '<div class="spinner" style="width:14px; height:14px; border-width:2px; border-top-color:#fff;"></div> Đang gửi lệnh đăng xuất...';
+        btn.disabled = true;
+      }
+      
+      google.script.run.withSuccessHandler(function(res) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        if (res.success) {
+          showToast(res.message, "success");
+        } else {
+          showToast("Lỗi: " + res.message, "error");
+        }
+      }).withFailureHandler(function(err) {
+        if (btn) {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }
+        showToast("Lỗi kết nối Server", "error");
+      }).adminForceLogoutAllUsers();
+    }
+  });
+}
+
+function loadAdminRecentQA(isSilent = false) {
+  const container = document.getElementById('adminQAListContainer');
+  const btn = document.getElementById('adminRefreshQABtn');
+  
+  if (container && !isSilent) container.innerHTML = getAdminSpinnerHTML("Đang tải dữ liệu hỏi đáp mới nhất...");
+  if (btn) btn.disabled = true;
+
+  google.script.run.withSuccessHandler(function(res) {
+    if (btn) btn.disabled = false;
+    if (res.success) {
+      renderAdminQA(res.data);
+    } else {
+      if (!isSilent && container) container.innerHTML = `<div style="text-align: center; padding: 30px; color: red;">Lỗi tải dữ liệu: ${res.message}</div>`;
+    }
+  }).withFailureHandler(function(err) {
+    if (btn) btn.disabled = false;
+    if (!isSilent && container) container.innerHTML = `<div style="text-align: center; padding: 30px; color: red;">Lỗi kết nối Server</div>`;
+  }).adminGetRecentQA();
+}
+
+function renderAdminQA(data) {
+  const container = document.getElementById('adminQAListContainer');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  if (!data || data.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 30px; color: #94a3b8;">Không có dữ liệu hỏi đáp.</div>`;
+    return;
+  }
+  
+  let unansweredCount = 0;
+  let answeredCount = 0;
+
+  // Sort data: prioritize Unanswered over Answered, then by time.
+  data.sort((a, b) => {
+      const aReplied = (a.replyCount > 0 || a.adminReacted) ? 1 : 0;
+      const bReplied = (b.replyCount > 0 || b.adminReacted) ? 1 : 0;
+      
+      if (aReplied === 0) unansweredCount++;
+      if (aReplied === 1) answeredCount++;
+
+      if (aReplied !== bReplied) return aReplied - bReplied; 
+      return 0; 
+  });
+  
+  // Actually, sorting modifies in place and doesn't count the last item fully because of the logic.
+  // Let's count properly:
+  unansweredCount = data.filter(i => i.replyCount === 0 && !i.adminReacted).length;
+  answeredCount = data.length - unansweredCount;
+
+  // Add stats header
+  const statsHeader = document.createElement('div');
+  statsHeader.style.display = 'flex';
+  statsHeader.style.gap = '15px';
+  statsHeader.style.marginBottom = '15px';
+  statsHeader.innerHTML = `
+    <div style="background: #fef2f2; color: #dc2626; padding: 10px 15px; border-radius: 8px; flex: 1; font-weight: bold; border: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center;">
+       <span>🔴 Chưa trả lời</span>
+       <span style="font-size: 1.25rem;">${unansweredCount}</span>
+    </div>
+    <div style="background: #f0fdf4; color: #16a34a; padding: 10px 15px; border-radius: 8px; flex: 1; font-weight: bold; border: 1px solid #bbf7d0; display: flex; justify-content: space-between; align-items: center;">
+       <span>✅ Đã trả lời</span>
+       <span style="font-size: 1.25rem;">${answeredCount}</span>
+    </div>
+  `;
+  container.appendChild(statsHeader);
+
+  data.forEach(item => {
+    // ... existing loop
+    const card = document.createElement('div');
+    card.style.background = 'white';
+    card.style.borderRadius = '12px';
+    card.style.padding = '16px';
+    card.style.marginBottom = '12px';
+    
+    const isAnswered = item.replyCount > 0 || item.adminReacted;
+    
+    if (isAnswered) {
+       card.style.border = '1px solid #e2e8f0';
+       card.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)';
+       card.style.opacity = '0.7'; 
+    } else {
+       card.style.border = '1px solid #fca5a5'; 
+       card.style.boxShadow = '0 4px 10px rgba(239, 68, 68, 0.1)'; 
+    }
+    
+    let badgeText = item.replyCount > 0 ? `✅ Đã trả lời (${item.replyCount})` : `✅ Đã đọc`;
+    let badge = isAnswered
+      ? `<span style="background: #f0fdf4; color: #16a34a; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; border: 1px solid #bbf7d0;">${badgeText}</span>` 
+      : `<span style="background: #fef2f2; color: #dc2626; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; border: 1px solid #fecaca; animation: pulse 2s infinite;">🔴 Chưa trả lời</span>`;
+      
+    const openAction = (item.fileType && item.fileId) 
+      ? `onclick="openLibraryItemAcrossAll('${item.fileType}', '${item.fileId}', true)"`
+      : `onclick="showToast('Không thể mở: thiếu fileId hoặc fileType', 'error')"`;
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+           <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #e0e7ff, #c7d2fe); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #4f46e5; border: 1px solid #a5b4fc;">
+              ${(item.name || item.email || "?").charAt(0).toUpperCase()}
+           </div>
+           <div>
+             <div style="font-weight: bold; color: #1e293b; font-size: 0.9rem;">${item.name || "Nặc danh"}</div>
+             <div style="color: #64748b; font-size: 0.8rem;">${item.email}</div>
+           </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+           ${badge}
+           <div style="color: #94a3b8; font-size: 0.75rem;">${item.timestamp}</div>
+        </div>
+      </div>
+      <div style="margin-top: 10px; margin-bottom: 15px; color: ${isAnswered ? '#64748b' : '#334155'}; font-size: 0.95rem; line-height: 1.5; padding: 10px; background: #f8fafc; border-radius: 8px; border-left: 3px solid ${isAnswered ? '#94a3b8' : '#ef4444'};">
+        ${item.content}
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+         <div style="font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 4px;">
+            <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+            <span style="font-style: italic;">${item.fileTitle}</span>
+         </div>
+         <div style="display: flex; align-items: center; gap: 8px;" id="admin-qa-actions-${item.id}">
+             <button class="qa-delete-btn" onclick="confirmAdminDeleteQA('${item.id}')" title="Xóa"><svg style="width:14px;height:14px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+             <button ${openAction} style="padding: 6px 12px; background: ${isAnswered ? 'white' : '#eff6ff'}; border: 1px solid ${isAnswered ? '#e2e8f0' : '#bfdbfe'}; border-radius: 6px; font-weight: bold; color: #3b82f6; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.background='#eff6ff'; this.style.borderColor='#bfdbfe';" onmouseout="this.style.background='${isAnswered ? 'white' : '#eff6ff'}'; this.style.borderColor='${isAnswered ? '#e2e8f0' : '#bfdbfe'}';">
+                👁️ ${isAnswered ? 'Xem Lại' : 'Phản Hồi Ngay'}
+             </button>
+         </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function confirmAdminDeleteQA(commentId) {
+  const actionsDiv = document.getElementById(`admin-qa-actions-${commentId}`);
+  if(!actionsDiv) return;
+  
+  if (!actionsDiv.dataset.original) {
+    actionsDiv.dataset.original = actionsDiv.innerHTML;
+  }
+  
+  actionsDiv.innerHTML = `
+    <span style="font-size: 11px; color: #ef4444; font-weight: 500;">Xóa?</span>
+    <button class="qa-react-btn" style="color: #ef4444; background: rgba(239, 68, 68, 0.1);" onclick="executeAdminDeleteQA('${commentId}')">Có</button>
+    <button class="qa-react-btn" style="background: rgba(148, 163, 184, 0.1);" onclick="cancelAdminDeleteQA('${commentId}')">Không</button>
+  `;
+}
+
+function cancelAdminDeleteQA(commentId) {
+  const actionsDiv = document.getElementById(`admin-qa-actions-${commentId}`);
+  if(actionsDiv && actionsDiv.dataset.original) {
+    actionsDiv.innerHTML = actionsDiv.dataset.original;
+  }
+}
+
+function executeAdminDeleteQA(commentId) {
+  const actionsDiv = document.getElementById(`admin-qa-actions-${commentId}`);
+  if(actionsDiv) {
+    actionsDiv.innerHTML = `<span style="font-size: 11px; color: #94a3b8;">Đang xóa...</span>`;
+  }
+  google.script.run.withSuccessHandler(function(res) {
+    if (res.success) {
+       loadAdminRecentQA(true);
+    } else {
+       showToast(res.message || "Không thể xóa bình luận.", "error");
+       cancelAdminDeleteQA(commentId);
+    }
+  }).deleteQAComment(commentId);
+}
+
+// ==========================================
+// QUẢN LÝ CHẤM THI & PHẢN HỒI (ADMIN EXAMS)
+// ==========================================
+let adminAllSubmissions = []; // Toàn bộ bài nộp được lấy từ Apps Script
+window.isAdminGraderInfoUnlocked = false;
+
+async function loadAdminExamsData(forceShowAll, silent) {
+  const tableBody = document.getElementById("adminExamSubmissionsTableBody");
+  if (!tableBody) return;
+
+  if (!silent) {
+    tableBody.innerHTML = getAdminSpinnerHTML("Đang tải danh sách bài thi đã nộp...", true, 8);
+  }
+
+  const showAll = (forceShowAll === true || (document.getElementById("adminExamShowAllCheckbox") && document.getElementById("adminExamShowAllCheckbox").checked));
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        adminAllSubmissions = res.data || [];
+        populateAdminExamTitlesDropdown(adminAllSubmissions);
+        populateAdminExamGradersDropdown(adminAllSubmissions);
+        filterAdminSubmissions();
+      } else {
+        if (!silent) {
+          tableBody.innerHTML = `
+            <tr>
+              <td colspan="8" style="padding: 40px; text-align: center; color: #ef4444; font-weight: bold;">
+                Lỗi khi tải dữ liệu: ${res.message}
+              </td>
+            </tr>
+          `;
+        } else if (typeof showToast === "function") {
+          showToast("Lỗi khi tải dữ liệu bài thi: " + res.message, "error");
+        }
+      }
+    })
+    .withFailureHandler(err => {
+      if (!silent) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" style="padding: 40px; text-align: center; color: #ef4444; font-weight: bold;">
+              Lỗi kết nối Server: ${err.message}
+            </td>
+          </tr>
+        `;
+      } else if (typeof showToast === "function") {
+        showToast("Lỗi kết nối Server: " + err.message, "error");
+      }
+    })
+    .adminGetExamSubmissions(showAll);
+}
+
+function populateAdminExamTitlesDropdown(submissions) {
+  const dropdown = document.getElementById("adminExamFilterTitle");
+  if (!dropdown) return;
+  
+  // Lưu giá trị đang chọn
+  const currentVal = dropdown.value;
+  
+  // Lấy danh sách các Exam Title duy nhất
+  const titlesSet = new Set();
+  submissions.forEach(sub => {
+    if (sub.examTitle) {
+      titlesSet.add(sub.examTitle.trim());
+    }
+  });
+
+  const titlesArray = Array.from(titlesSet).sort();
+  dropdown.innerHTML = '<option value="all">-- Tất cả đề thi --</option>';
+  titlesArray.forEach(title => {
+    const opt = document.createElement("option");
+    opt.value = title;
+    opt.textContent = title;
+    dropdown.appendChild(opt);
+  });
+
+  // Khôi phục giá trị đang chọn nếu có
+  if (titlesArray.includes(currentVal)) {
+    dropdown.value = currentVal;
+  } else {
+    dropdown.value = "all";
+  }
+}
+
+function populateAdminExamGradersDropdown(submissions) {
+  const dropdown = document.getElementById("adminExamFilterGrader");
+  if (!dropdown) return;
+  
+  const currentVal = dropdown.value;
+  const gradersSet = new Set();
+  submissions.forEach(sub => {
+    if (sub.score !== "" && sub.gradedBy) {
+      gradersSet.add(sub.gradedBy.trim());
+    }
+  });
+
+  const gradersArray = Array.from(gradersSet).sort();
+  dropdown.innerHTML = '<option value="all">-- Tất cả người chấm --</option>';
+  gradersArray.forEach(grader => {
+    const opt = document.createElement("option");
+    opt.value = grader;
+    opt.textContent = grader;
+    dropdown.appendChild(opt);
+  });
+
+  if (gradersArray.includes(currentVal)) {
+    dropdown.value = currentVal;
+  } else {
+    dropdown.value = "all";
+  }
+}
+
+function parseSubmissionDateStr(dateStr) {
+  if (!dateStr) return null;
+  const str = dateStr.toString().trim();
+  if (!str) return null;
+
+  // Case 1: "dd/MM/yyyy HH:mm:ss" or "dd/MM/yyyy"
+  const spaceParts = str.split(" ");
+  const slashParts = spaceParts[0].split("/");
+  if (slashParts.length === 3) {
+    const day = parseInt(slashParts[0], 10);
+    const month = parseInt(slashParts[1], 10) - 1; // 0-indexed
+    const year = parseInt(slashParts[2], 10);
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+      let hours = 0, mins = 0, secs = 0;
+      if (spaceParts[1]) {
+        const timeParts = spaceParts[1].split(":");
+        if (timeParts.length >= 2) {
+          hours = parseInt(timeParts[0], 10) || 0;
+          mins = parseInt(timeParts[1], 10) || 0;
+          secs = parseInt(timeParts[2], 10) || 0;
+        }
+      }
+      return new Date(year, month, day, hours, mins, secs);
+    }
+  }
+
+  // Case 2: Standard Date
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function handleAdminExamTimeTypeChange() {
+  const timeType = document.getElementById("adminExamFilterTimeType")?.value || "all";
+  const monthWrapper = document.getElementById("adminExamFilterMonthWrapper");
+  const customWrapper = document.getElementById("adminExamFilterCustomWrapper");
+
+  if (monthWrapper) monthWrapper.style.display = (timeType === "by_month") ? "block" : "none";
+  if (customWrapper) customWrapper.style.display = (timeType === "custom") ? "flex" : "none";
+
+  if (timeType === "by_month") {
+    const monthInput = document.getElementById("adminExamFilterMonth");
+    if (monthInput && !monthInput.value) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      monthInput.value = `${yyyy}-${mm}`;
+    }
+  }
+
+  filterAdminSubmissions();
+}
+
+function updateAdminPayrollSummary(submissions, selectedGrader) {
+  const summaryEl = document.getElementById("adminExamPayrollSummary");
+  if (!summaryEl) return;
+
+  const totalSubs = submissions.length;
+  const gradedSubs = submissions.filter(s => s.score !== "").length;
+  const pendingSubs = totalSubs - gradedSubs;
+  const isDark = document.body.classList.contains("dark-mode");
+
+  const timeType = document.getElementById("adminExamFilterTimeType")?.value || "all";
+  const filterMonth = document.getElementById("adminExamFilterMonth")?.value || "";
+  const startDateVal = document.getElementById("adminExamFilterStartDate")?.value || "";
+  const endDateVal = document.getElementById("adminExamFilterEndDate")?.value || "";
+
+  let timeBadgeText = "";
+  if (timeType === "this_month") {
+    const now = new Date();
+    timeBadgeText = ` (Tháng ${now.getMonth() + 1}/${now.getFullYear()})`;
+  } else if (timeType === "last_month") {
+    const now = new Date();
+    const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    timeBadgeText = ` (Tháng ${lastM.getMonth() + 1}/${lastM.getFullYear()})`;
+  } else if (timeType === "by_month" && filterMonth) {
+    const [mY, mM] = filterMonth.split("-");
+    if (mY && mM) timeBadgeText = ` (Tháng ${mM}/${mY})`;
+  } else if (timeType === "custom" && (startDateVal || endDateVal)) {
+    timeBadgeText = ` (${startDateVal || '...'} đến ${endDateVal || '...'})`;
+  }
+  
+  if (window.isAdminGraderInfoUnlocked && selectedGrader && selectedGrader !== "all") {
+    summaryEl.innerHTML = `
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: ${isDark ? 'rgba(37, 99, 235, 0.15)' : '#eff6ff'}; border: 1px solid ${isDark ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe'}; border-radius: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.3rem;">👤</span>
+          <div>
+            <div style="font-size: 0.9rem; font-weight: 800; color: ${isDark ? '#93c5fd' : '#1d4ed8'};">Giáo viên chấm bài: <span style="text-decoration: underline;">${selectedGrader}</span><span style="font-size: 0.82rem; font-weight: 600; color: #3b82f6;">${timeBadgeText}</span></div>
+            <div style="font-size: 0.78rem; color: ${isDark ? '#cbd5e1' : '#475569'}; margin-top: 2px;">Tổng hợp số lượng bài thi đã hoàn thành chấm điểm theo từng giáo viên</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div style="text-align: right; background: ${isDark ? 'rgba(16, 185, 129, 0.2)' : '#dcfce7'}; padding: 6px 16px; border-radius: 8px; border: 1px solid ${isDark ? 'rgba(16, 185, 129, 0.4)' : '#86efac'};">
+            <div style="font-size: 0.72rem; color: ${isDark ? '#6ee7b7' : '#15803d'}; font-weight: 700; text-transform: uppercase;">SỐ BÀI ĐÃ CHẤM</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #10b981;">${gradedSubs} <small style="font-size: 0.8rem; font-weight: 700;">bài</small></div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    summaryEl.innerHTML = `
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: ${isDark ? 'rgba(30, 41, 59, 0.5)' : '#f8fafc'}; border: 1px solid ${isDark ? '#334155' : '#e2e8f0'}; border-radius: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.3rem;">📊</span>
+          <div>
+            <div style="font-size: 0.9rem; font-weight: 800; color: ${isDark ? '#e2e8f0' : '#1e293b'};">Thống kê Chấm thi Khảo thí<span style="font-size: 0.82rem; font-weight: 600; color: #3b82f6;">${timeBadgeText}</span></div>
+            <div style="font-size: 0.78rem; color: ${isDark ? '#94a3b8' : '#64748b'}; margin-top: 2px;">Tổng hợp số lượng bài nộp, trạng thái đã chấm và chưa chấm của học sinh</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <div style="text-align: center;">
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 700;">TỔNG NỘP</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: ${isDark ? '#f1f5f9' : '#0f172a'};">${totalSubs}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 0.72rem; color: #10b981; font-weight: 700;">ĐÃ CHẤM</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${gradedSubs}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 0.72rem; color: #ef4444; font-weight: 700;">CHỜ CHẤM</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #ef4444;">${pendingSubs}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function unlockGraderInfoWithPasscode() {
+  const isDark = document.body.classList.contains("dark-mode");
+  if (window.isAdminGraderInfoUnlocked) {
+    showConfirmModal(
+      'Khóa lại thông tin người chấm?',
+      'Bạn có muốn ẩn lại thông tin người chấm bài thi không?',
+      () => {
+        window.isAdminGraderInfoUnlocked = false;
+        filterAdminSubmissions();
+        const btn = document.getElementById("btnToggleGraderInfoUnlock");
+        if (btn) {
+          btn.innerHTML = '🔒 Mở Khóa Người Chấm (Passcode)';
+          btn.style.background = isDark ? '#1e293b' : '#f1f5f9';
+          btn.style.color = isDark ? '#cbd5e1' : '#475569';
+          btn.style.borderColor = isDark ? '#334155' : '#cbd5e1';
+        }
+        showToast("Đã ẩn lại thông tin người chấm.", "info");
+      },
+      '🔒',
+      'Khóa lại'
+    );
+    return;
+  }
+
+  window.passcodeBypassCallback = function() {
+    window.isAdminGraderInfoUnlocked = true;
+    filterAdminSubmissions();
+    const btn = document.getElementById("btnToggleGraderInfoUnlock");
+    if (btn) {
+      btn.innerHTML = '🔓 Đã Mở Khóa Người Chấm';
+      btn.style.background = isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.15)';
+      btn.style.color = isDark ? '#34d399' : '#10b981';
+      btn.style.borderColor = isDark ? 'rgba(16, 185, 129, 0.4)' : '#a7f3d0';
+    }
+    showToast("Đã mở khóa thông tin người chấm bài thi!", "success");
+  };
+
+  window.showAdminPasscodePrompt();
+}
+
+function filterAdminSubmissions() {
+  clearTimeout(window._filterAdminSubmissionsTimeout);
+  window._filterAdminSubmissionsTimeout = setTimeout(() => {
+    const searchEmail = (document.getElementById("adminExamSearchEmail")?.value || "").toLowerCase().trim();
+  const filterTitle = document.getElementById("adminExamFilterTitle")?.value || "all";
+  const filterStatus = document.getElementById("adminExamFilterStatus")?.value || "all";
+  
+  const filterGraderEl = document.getElementById("adminExamFilterGrader");
+  const filterGraderContainer = document.getElementById("adminExamFilterGraderContainer");
+
+  // Show grader filter dropdown ONLY when passcode is unlocked
+  if (filterGraderContainer) {
+    if (window.isAdminGraderInfoUnlocked) {
+      filterGraderContainer.style.display = "block";
+    } else {
+      filterGraderContainer.style.display = "none";
+      if (filterGraderEl) filterGraderEl.value = "all";
+    }
+  }
+
+  const filterGrader = window.isAdminGraderInfoUnlocked ? (filterGraderEl?.value || "all") : "all";
+
+  // Time filter setup
+  const timeType = document.getElementById("adminExamFilterTimeType")?.value || "all";
+  const filterMonth = document.getElementById("adminExamFilterMonth")?.value || "";
+  const startDateVal = document.getElementById("adminExamFilterStartDate")?.value || "";
+  const endDateVal = document.getElementById("adminExamFilterEndDate")?.value || "";
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-based
+
+  let filterStart = null;
+  let filterEnd = null;
+
+  if (timeType === "this_month") {
+    filterStart = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+    filterEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+  } else if (timeType === "last_month") {
+    filterStart = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
+    filterEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+  } else if (timeType === "by_month" && filterMonth) {
+    const [mYear, mMonth] = filterMonth.split("-").map(Number);
+    if (mYear && mMonth) {
+      filterStart = new Date(mYear, mMonth - 1, 1, 0, 0, 0, 0);
+      filterEnd = new Date(mYear, mMonth, 0, 23, 59, 59, 999);
+    }
+  } else if (timeType === "custom") {
+    if (startDateVal) {
+      const [sY, sM, sD] = startDateVal.split("-").map(Number);
+      if (sY && sM && sD) filterStart = new Date(sY, sM - 1, sD, 0, 0, 0, 0);
+    }
+    if (endDateVal) {
+      const [eY, eM, eD] = endDateVal.split("-").map(Number);
+      if (eY && eM && eD) filterEnd = new Date(eY, eM - 1, eD, 23, 59, 59, 999);
+    }
+  }
+
+  const filtered = adminAllSubmissions.filter(sub => {
+    const emailMatch = !searchEmail || sub.email.toLowerCase().includes(searchEmail);
+    const titleMatch = filterTitle === "all" || sub.examTitle === filterTitle;
+    
+    let statusMatch = true;
+    if (filterStatus === "pending") {
+      statusMatch = sub.score === "";
+    } else if (filterStatus === "graded") {
+      statusMatch = sub.score !== "";
+    }
+
+    let graderMatch = true;
+    if (filterGrader !== "all") {
+      const gVal = (sub.gradedBy || "Admin").trim().toLowerCase();
+      graderMatch = (gVal === filterGrader.trim().toLowerCase());
+    }
+
+    let timeMatch = true;
+    if (filterStart || filterEnd) {
+      // Prioritize gradedAt if available, fallback to timestamp
+      const targetDateStr = sub.gradedAt || sub.timestamp || "";
+      const subDate = parseSubmissionDateStr(targetDateStr);
+      if (subDate) {
+        if (filterStart && subDate < filterStart) timeMatch = false;
+        if (filterEnd && subDate > filterEnd) timeMatch = false;
+      } else {
+        timeMatch = false;
+      }
+    }
+
+    return emailMatch && titleMatch && statusMatch && graderMatch && timeMatch;
+  });
+
+  updateAdminPayrollSummary(filtered, filterGrader);
+  renderAdminExamsTable(filtered);
+  }, 250);
+}
+
+function parseScoreWithComponentsJS(rawScore) {
+  rawScore = (rawScore || "").toString().trim();
+  if (!rawScore) return { total: "", components: [] };
+  
+  function cleanNum(str) {
+    if (str === null || str === undefined || str === "") return "";
+    const num = parseFloat(str.toString().replace(/,/g, "."));
+    if (isNaN(num)) return str;
+    const rounded = Math.round(num * 100) / 100;
+    return rounded.toString().replace(/\./g, ",");
+  }
+
+  if (rawScore.indexOf("[") !== -1) {
+    const parts = rawScore.split("[");
+    const totalRaw = parts[0].trim();
+    const compStr = parts[1].replace("]", "").trim();
+    const components = compStr ? compStr.split(";").map(s => { 
+      const val = parseFloat(s.trim().replace(/,/g, ".")); 
+      return isNaN(val) ? 0 : Math.round(val * 100) / 100; 
+    }) : [];
+    return { total: cleanNum(totalRaw), components: components };
+  }
+  return { total: cleanNum(rawScore), components: [] };
+}
+
+window.toggleTableGroup = function(slug, headerCell) {
+  window.expandedGroupsState = window.expandedGroupsState || {};
+  const isDark = document.body.classList.contains("dark-mode");
+  const arrow = headerCell.querySelector(".grp-arrow");
+  const groupKey = headerCell.getAttribute("data-group-key");
+  
+  if (slug.startsWith("class-grp-")) {
+    const rows = document.querySelectorAll("." + slug);
+    if (rows.length === 0) return;
+    
+    // Find the first exam header row to determine current L1 expansion state
+    const firstL2 = Array.from(rows).find(r => r.classList.contains("exam-header-row"));
+    const isHidden = firstL2 ? firstL2.style.display === "none" : rows[0].style.display === "none";
+    
+    if (groupKey) {
+      window.expandedGroupsState[groupKey] = isHidden;
+    }
+    
+    rows.forEach(r => {
+      if (isHidden) {
+        // Expand the L1 Class Group: only show the L2 exam header rows
+        if (r.classList.contains("exam-header-row")) {
+          r.style.display = "table-row";
+          
+          const examSlug = r.getAttribute("data-exam-slug");
+          const subArrow = r.querySelector(".grp-arrow");
+          // If the exam sub-group was already expanded, show its children too
+          const isExamExpanded = subArrow && subArrow.style.transform !== "rotate(0deg)";
+          
+          if (isExamExpanded) {
+            document.querySelectorAll("." + examSlug).forEach(subRow => {
+              subRow.style.display = "table-row";
+            });
+          } else {
+            document.querySelectorAll("." + examSlug).forEach(subRow => {
+              subRow.style.display = "none";
+            });
+          }
+        }
+      } else {
+        // Collapse the L1 Class Group: hide everything belonging to this class
+        r.style.display = "none";
+      }
+    });
+    
+    if (arrow) {
+      arrow.style.transform = isHidden ? "rotate(90deg)" : "rotate(0deg)";
+    }
+  } else if (slug.startsWith("exam-grp-")) {
+    // This is an L2 toggle (Exam Group)
+    const rows = document.querySelectorAll("." + slug);
+    if (rows.length === 0) return;
+    
+    const isHidden = rows[0].style.display === "none";
+    if (groupKey) {
+      window.expandedGroupsState[groupKey] = isHidden;
+    }
+    
+    rows.forEach(r => {
+      r.style.display = isHidden ? "table-row" : "none";
+    });
+    
+    if (arrow) {
+      arrow.style.transform = isHidden ? "rotate(90deg)" : "rotate(0deg)";
+    }
+  } else if (slug.startsWith("hw-folder-grp-")) {
+    // L1 Homework Folder Toggle
+    const rows = document.querySelectorAll("." + slug);
+    if (rows.length === 0) return;
+    
+    const firstL2 = Array.from(rows).find(r => r.classList.contains("hw-file-header-row"));
+    const isHidden = firstL2 ? firstL2.style.display === "none" : rows[0].style.display === "none";
+    if (groupKey) {
+      window.expandedGroupsState[groupKey] = isHidden;
+    }
+    
+    rows.forEach(r => {
+      if (isHidden) {
+        if (r.classList.contains("hw-file-header-row")) {
+          r.style.display = "table-row";
+          
+          const fileSlug = r.getAttribute("data-file-slug");
+          const subArrow = r.querySelector(".grp-arrow");
+          const isFileExpanded = subArrow && subArrow.style.transform !== "rotate(0deg)";
+          
+          if (isFileExpanded) {
+            document.querySelectorAll("." + fileSlug).forEach(subRow => {
+              subRow.style.display = "table-row";
+            });
+          } else {
+            document.querySelectorAll("." + fileSlug).forEach(subRow => {
+              subRow.style.display = "none";
+            });
+          }
+        }
+      } else {
+        r.style.display = "none";
+      }
+    });
+    
+    if (arrow) {
+      arrow.style.transform = isHidden ? "rotate(90deg)" : "rotate(0deg)";
+    }
+  } else if (slug.startsWith("hw-file-grp-")) {
+    // L2 Homework File Toggle
+    const rows = document.querySelectorAll("." + slug);
+    if (rows.length === 0) return;
+    
+    const isHidden = rows[0].style.display === "none";
+    if (groupKey) {
+      window.expandedGroupsState[groupKey] = isHidden;
+    }
+    
+    rows.forEach(r => {
+      r.style.display = isHidden ? "table-row" : "none";
+    });
+    
+    if (arrow) {
+      arrow.style.transform = isHidden ? "rotate(90deg)" : "rotate(0deg)";
+    }
+  } else {
+    // Fallback/standard behavior for single-level grouping (e.g. Homework "hw-grp-")
+    const rows = document.querySelectorAll("." + slug);
+    if (rows.length === 0) return;
+    
+    const isHidden = rows[0].style.display === "none";
+    if (groupKey) {
+      window.expandedGroupsState[groupKey] = isHidden;
+    }
+    
+    rows.forEach(r => {
+      r.style.display = isHidden ? "table-row" : "none";
+    });
+    
+    if (arrow) {
+      arrow.style.transform = isHidden ? "rotate(90deg)" : "rotate(0deg)";
+    }
+  }
+};
+
+function renderAdminExamsTable(submissions) {
+  const tableBody = document.getElementById("adminExamSubmissionsTableBody");
+  if (!tableBody) return;
+
+  if (submissions.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="8" style="padding: 40px; text-align: center; color: #64748b; font-size: 0.95rem;">
+          Không có kết quả bài nộp nào phù hợp.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tableBody.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  const isDark = document.body.classList.contains("dark-mode");
+
+  // Group submissions by Class Name, and then by Exam Title
+  const classGroups = {};
+  submissions.forEach(sub => {
+    const cName = sub.className ? sub.className.trim() : "Khác";
+    const eTitle = sub.examTitle ? sub.examTitle.trim() : "Chưa phân loại";
+    
+    if (!classGroups[cName]) {
+      classGroups[cName] = {
+        title: cName,
+        exams: {},
+        totalCount: 0,
+        gradedCount: 0,
+        ungradedCount: 0
+      };
+    }
+    
+    if (!classGroups[cName].exams[eTitle]) {
+      classGroups[cName].exams[eTitle] = {
+        title: eTitle,
+        items: [],
+        gradedCount: 0,
+        ungradedCount: 0
+      };
+    }
+    
+    classGroups[cName].exams[eTitle].items.push(sub);
+    classGroups[cName].totalCount++;
+    if (sub.score !== "") {
+      classGroups[cName].exams[eTitle].gradedCount++;
+      classGroups[cName].gradedCount++;
+    } else {
+      classGroups[cName].exams[eTitle].ungradedCount++;
+      classGroups[cName].ungradedCount++;
+    }
+  });
+
+  Object.keys(classGroups).forEach((cKey, cIndex) => {
+    const classGroup = classGroups[cKey];
+    const classSlug = "class-grp-" + cIndex;
+    
+    window.expandedGroupsState = window.expandedGroupsState || {};
+    const classGroupKey = "class:" + classGroup.title;
+    const classIsExpanded = window.expandedGroupsState[classGroupKey] === true;
+    const classArrowTransform = classIsExpanded ? "rotate(90deg)" : "rotate(0deg)";
+
+    // 1. Render Class Header Row (L1)
+    const classTr = document.createElement("tr");
+    classTr.className = "group-header-row class-header-row";
+    classTr.style.background = isDark ? "rgba(99, 102, 241, 0.12)" : "#f5f3ff";
+    classTr.style.borderBottom = `1px solid ${isDark ? "rgba(99, 102, 241, 0.2)" : "#ddd6fe"}`;
+    classTr.style.cursor = "pointer";
+
+    const classUncompletedBadge = classGroup.ungradedCount > 0 
+      ? `<span style="background: ${isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2'}; color: #ef4444; border: 1px solid ${isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca'}; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(239, 68, 68, 0.05);">🏫 Chờ chấm: ${classGroup.ungradedCount}</span>`
+      : `<span style="background: ${isDark ? 'rgba(22, 163, 74, 0.15)' : '#ecfdf5'}; color: #10b981; border: 1px solid ${isDark ? 'rgba(22, 163, 74, 0.3)' : '#a7f3d0'}; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(16, 185, 129, 0.05);">✨ Đã hoàn thành</span>`;
+
+    const classBorderColor = "#6366f1";
+    const classTitleColor = isDark ? "#c7d2fe" : "#4338ca";
+    const classCountColor = isDark ? "#94a3b8" : "#475569";
+
+    classTr.innerHTML = `
+      <td colspan="8" data-group-key="${classGroupKey}" style="padding: 14px 16px; user-select: none; border-left: 4px solid ${classBorderColor};" onclick="toggleTableGroup('${classSlug}', this)">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg class="grp-arrow" style="width: 14px; height: 14px; fill: none; stroke: ${isDark ? '#94a3b8' : '#475569'}; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.2s ease; transform: ${classArrowTransform};" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+            <span style="font-size: 1.2rem; line-height: 1;">🏫</span>
+            <span style="color: ${classTitleColor}; font-weight: 850; font-size: 1.05rem; letter-spacing: -0.01em;">${classGroup.title}</span>
+            <span style="font-weight: 600; font-size: 0.75rem; background: ${isDark ? 'rgba(148, 163, 184, 0.15)' : '#e2e8f0'}; color: ${classCountColor}; padding: 2px 8px; border-radius: 12px; margin-left: 4px;">
+              ${classGroup.totalCount} bài nộp
+            </span>
+          </div>
+          <div>
+            ${classUncompletedBadge}
+          </div>
+        </div>
+      </td>
+    `;
+    fragment.appendChild(classTr);
+
+    // 2. Render Exam Header Rows (L2) and Student Submissions (L3) under each Class
+    Object.keys(classGroup.exams).forEach((eKey, eIndex) => {
+      const examGroup = classGroup.exams[eKey];
+      const examSlug = `exam-grp-${cIndex}-${eIndex}`;
+      
+      const examGroupKey = "exam:" + classGroup.title + ":" + examGroup.title;
+      const examIsExpanded = window.expandedGroupsState[examGroupKey] === true;
+      const examArrowTransform = examIsExpanded ? "rotate(90deg)" : "rotate(0deg)";
+
+      const examTr = document.createElement("tr");
+      examTr.className = `${classSlug} exam-header-row`;
+      examTr.setAttribute("data-exam-slug", examSlug);
+      examTr.style.background = isDark ? "rgba(59, 130, 246, 0.08)" : "#f0f7ff";
+      examTr.style.borderBottom = `1px solid ${isDark ? "rgba(59, 130, 246, 0.2)" : "#dbeafe"}`;
+      examTr.style.cursor = "pointer";
+      examTr.style.display = classIsExpanded ? "table-row" : "none";
+
+      const examUncompletedBadge = examGroup.ungradedCount > 0 
+        ? `<span style="background: ${isDark ? 'rgba(239, 68, 68, 0.1)' : '#fff5f5'}; color: #ef4444; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; border: 1px solid ${isDark ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2'};">🕒 Chờ: ${examGroup.ungradedCount}</span>`
+        : `<span style="background: ${isDark ? 'rgba(22, 163, 74, 0.1)' : '#f0fdf4'}; color: #10b981; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; border: 1px solid ${isDark ? 'rgba(22, 163, 74, 0.2)' : '#dcfce7'};">✨ Xong</span>`;
+
+      const examBorderColor = "#3b82f6";
+      const examTitleColor = isDark ? "#93c5fd" : "#1d4ed8";
+      const examCountColor = isDark ? "#94a3b8" : "#475569";
+
+      examTr.innerHTML = `
+        <td colspan="8" data-group-key="${examGroupKey}" style="padding: 10px 16px 10px 32px; user-select: none; border-left: 4px solid ${examBorderColor};" onclick="toggleTableGroup('${examSlug}', this)">
+          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg class="grp-arrow" style="width: 12px; height: 12px; fill: none; stroke: ${isDark ? '#94a3b8' : '#475569'}; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.2s ease; transform: ${examArrowTransform};" viewBox="0 0 24 24">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span style="font-size: 1rem; line-height: 1;">📝</span>
+              <span style="color: ${examTitleColor}; font-weight: 750; font-size: 0.9rem; letter-spacing: -0.01em;">${examGroup.title}</span>
+              <span style="font-weight: 600; font-size: 0.7rem; background: ${isDark ? 'rgba(148, 163, 184, 0.12)' : '#e2e8f0'}; color: ${examCountColor}; padding: 1px 6px; border-radius: 10px;">
+                ${examGroup.items.length} bài
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;" onclick="event.stopPropagation()">
+              ${examUncompletedBadge}
+              <button onclick="viewExamStatsNow('${examGroup.title.replace(/'/g, "\\'")}')" style="background: ${isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5'}; color: #10b981; border: 1px solid ${isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0'}; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s; outline: none;" onmouseover="this.style.background='#10b981'; this.style.color='white';" onmouseout="this.style.background='${isDark ? "rgba(16, 185, 129, 0.15)" : "#ecfdf5"}'; this.style.color='#10b981';">
+                📈 Phổ điểm
+              </button>
+            </div>
+          </div>
+        </td>
+      `;
+      fragment.appendChild(examTr);
+
+      // 3. Render Student Row (L3) under each Exam
+      examGroup.items.forEach(sub => {
+        const tr = document.createElement("tr");
+        tr.className = `${classSlug} ${examSlug} nested-student-row`;
+        tr.style.borderBottom = isDark ? "1px solid #334155" : "1px solid #e2e8f0";
+        tr.style.verticalAlign = "middle";
+        tr.style.display = (classIsExpanded && examIsExpanded) ? "table-row" : "none";
+        
+        const isGraded = sub.score !== "";
+        const parsed = parseScoreWithComponentsJS(sub.score);
+        const scoreTextToDisplay = isGraded ? parsed.total : "—";
+        
+        const statusBadge = isGraded 
+          ? `<span style="background: ${isDark ? 'rgba(22, 163, 74, 0.15)' : '#ecfdf5'}; color: #10b981; padding: 4px 10px; border-radius: 6px; font-weight: 700; border: 1px solid ${isDark ? 'rgba(22, 163, 74, 0.3)' : '#a7f3d0'}; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">
+              <svg style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3;" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Đã chấm
+            </span>`
+          : `<span style="background: ${isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2'}; color: #ef4444; padding: 4px 10px; border-radius: 6px; font-weight: 700; border: 1px solid ${isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca'}; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">
+              <svg style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3;" viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Chưa chấm
+            </span>`;
+        
+        const actionText = isGraded ? "Sửa Điểm" : "Chấm Điểm";
+        const actionBtnClass = isGraded ? "background: #f59e0b;" : "background: #2563eb;";
+
+        const escEmail = sub.email.replace(/'/g, "\\'");
+        const escTitle = sub.examTitle.replace(/'/g, "\\'");
+        const escTime = sub.timestamp.replace(/'/g, "\\'");
+        const escFileUrl = sub.fileUrl.replace(/'/g, "\\'");
+        const escScore = sub.score.replace(/'/g, "\\'");
+        const escRemark = (sub.remark || "").replace(/'/g, "\\'").replace(/\n/g, "\\n");
+        const escGradedBy = (sub.gradedBy || "Ban Khảo Thí").replace(/'/g, "\\'");
+        const escDisplayName = (sub.displayName || "").replace(/'/g, "\\'");
+
+        let graderInfoHtml = "";
+        if (!isGraded) {
+          graderInfoHtml = `<span style="color: #94a3b8; font-size: 0.85rem;">—</span>`;
+        } else if (!window.isAdminGraderInfoUnlocked) {
+          graderInfoHtml = `
+            <button onclick="unlockGraderInfoWithPasscode()" style="background: ${isDark ? 'rgba(30, 41, 59, 0.8)' : '#f1f5f9'}; color: ${isDark ? '#94a3b8' : '#475569'}; border: 1px dashed ${isDark ? '#334155' : '#cbd5e1'}; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" title="Nhấp để nhập mật khẩu Admin xem người chấm">
+              🔒 Mật khẩu
+            </button>
+          `;
+        } else {
+          const graderName = sub.gradedBy || "Admin";
+          const gradedTime = sub.gradedAt || sub.timestamp || "—";
+          graderInfoHtml = `
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+              <span style="font-size: 0.82rem; font-weight: 700; color: ${isDark ? '#93c5fd' : '#1d4ed8'}; display: inline-flex; align-items: center; gap: 4px;">
+                👤 ${graderName}
+              </span>
+              <span style="font-size: 0.72rem; color: ${isDark ? '#94a3b8' : '#64748b'};">
+                🕒 ${gradedTime}
+              </span>
+            </div>
+          `;
+        }
+
+        tr.innerHTML = `
+          <td style="padding: 10px 14px 10px 48px; font-weight: 600; color: ${isDark ? '#e2e8f0' : '#1e293b'}; white-space: nowrap;">
+            <div style="display: flex; align-items: center; gap: 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${sub.email}">
+              <svg style="width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; opacity: 0.6;" viewBox="0 0 24 24">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sub.email}</span>
+            </div>
+          </td>
+          <td style="padding: 10px 14px; font-weight: 500; color: ${isDark ? '#cbd5e1' : '#334155'}; white-space: nowrap;">
+            <div style="max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${sub.examTitle}">
+              ${sub.examTitle}
+            </div>
+          </td>
+          <td style="padding: 10px 14px; color: #64748b; font-size: 0.82rem; text-align: center; white-space: nowrap;">${sub.timestamp}</td>
+          <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+            <a href="${sub.fileUrl}" target="_blank" class="admin-pdf-link" style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: ${isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff'}; color: #3b82f6; border: 1px solid ${isDark ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe'}; border-radius: 6px; font-size: 0.78rem; font-weight: 600; text-decoration: none; white-space: nowrap; transition: all 0.2s;" title="Nhấp để xem chi tiết bài làm PDF">
+              <svg style="width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              Xem PDF
+            </a>
+          </td>
+          <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">${statusBadge}</td>
+          <td style="padding: 10px 14px; text-align: center; font-weight: bold; font-size: 1rem; color: #16a34a; white-space: nowrap;">
+            ${scoreTextToDisplay}
+          </td>
+          <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+            ${graderInfoHtml}
+          </td>
+          <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+            <button onclick="openGradeModal('${escEmail}', '${escTitle}', '${escTime}', '${escFileUrl}', '${escScore}')" style="${actionBtnClass} color: white; border: none; padding: 5px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.78rem; white-space: nowrap; transition: filter 0.2s;">
+              ${actionText}
+            </button>
+            <button onclick="openIndividualScoreReportModal({ examTitle: '${escTitle}', studentEmail: '${escEmail}', studentName: '${escDisplayName}', score: '${escScore}', rank: 0, totalCandidates: 0, remark: '${escRemark}', gradedBy: '${escGradedBy}', gradedAt: '${escTime}' })" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.78rem; white-space: nowrap; margin-left: 4px; transition: all 0.2s;" title="Xuất phiếu điểm cá nhân của học sinh này">
+              📄 Phiếu điểm
+            </button>
+          </td>
+        `;
+        fragment.appendChild(tr);
+      });
+    });
+  });
+
+  tableBody.appendChild(fragment);
+}
+
+function getEmbedPdfUrl(url) {
+  if (!url) return "";
+  let embedUrl = url;
+  if (url.includes("drive.google.com")) {
+    embedUrl = url.replace(/\/view(\?.*)?$/, "/preview");
+    if (!embedUrl.includes("/preview") && embedUrl.includes("/d/")) {
+      const parts = embedUrl.split("/d/");
+      if (parts.length > 1) {
+        const fileId = parts[1].split("/")[0];
+        embedUrl = "https://drive.google.com/file/d/" + fileId + "/preview";
+      }
+    }
+  }
+  return embedUrl;
+}
+
+let currentAnswerPdfFile = null;
+let answerZoomScale = 1.0;
+let answerFileType = ""; // "pdf" or "image"
+let activePdfRenderToken = 0; // Prevent race conditions & page jumbling!
+let answerKeyCache = {}; // Cache for local answer key files keyed by normalized exam title
+let currentGradingExamTitle = ""; // Current exam title of the grading session
+
+function zoomAnswerIn() {
+  if (answerZoomScale >= 3.0) return;
+  answerZoomScale = parseFloat((answerZoomScale + 0.15).toFixed(2));
+  updateAnswerZoom();
+}
+
+function zoomAnswerOut() {
+  if (answerZoomScale <= 0.4) return;
+  answerZoomScale = parseFloat((answerZoomScale - 0.15).toFixed(2));
+  updateAnswerZoom();
+}
+
+function resetAnswerZoom() {
+  answerZoomScale = 1.0;
+  updateAnswerZoom();
+}
+
+function updateAnswerZoom() {
+  const percentEl = document.getElementById("answerZoomPercent");
+  if (percentEl) {
+    percentEl.textContent = `${Math.round(answerZoomScale * 100)}%`;
+  }
+  
+  if (answerFileType === "pdf") {
+    const pages = document.querySelectorAll(".answer-pdf-page-wrapper");
+    pages.forEach(wrapper => {
+      const baseWidth = parseFloat(wrapper.dataset.baseWidth || "400");
+      wrapper.style.width = (baseWidth * answerZoomScale) + "px";
+    });
+  } else if (answerFileType === "image") {
+    const img = document.getElementById("gradeModalAnswerImg");
+    if (img) {
+      img.style.width = (100 * answerZoomScale) + "%";
+      img.style.maxWidth = "none";
+    }
+  }
+}
+
+async function renderPdfToCanvases(file) {
+  const container = document.getElementById("gradeModalAnswerPdfCanvasContainer");
+  if (!container) return;
+  
+  // Create a unique token for this rendering session to discard stale renders
+  const thisToken = ++activePdfRenderToken;
+  
+  // Show beautiful inline loading indicator
+  container.innerHTML = `
+    <div style="color: #cbd5e1; padding: 40px 20px; text-align: center; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: auto; margin-bottom: auto;">
+      <div style="font-size: 2.2rem; animation: spin 1.5s linear infinite; display: inline-block; color: #3b82f6;">⏳</div>
+      <div style="font-size: 0.9rem; font-weight: 600; color: #f1f5f9;">Đang dựng file đáp án PDF...</div>
+      <div style="font-size: 0.75rem; color: #94a3b8; max-width: 250px; line-height: 1.4;">Đang xử lý trực tiếp trên trình duyệt để tránh bị Chrome chặn bảo mật.</div>
+    </div>
+  `;
+  container.style.display = "flex";
+
+  try {
+    if (typeof pdfjsLib === 'undefined') {
+      throw new Error("pdfjsLib is not loaded");
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    if (thisToken !== activePdfRenderToken) return; // Discard stale render
+    
+    const loadingTask = pdfjsLib.getDocument({ 
+        data: arrayBuffer,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/cmaps/',
+        cMapPacked: true
+    });
+    const pdf = await loadingTask.promise;
+    if (thisToken !== activePdfRenderToken) return; // Discard stale render
+    
+    container.innerHTML = ""; // Clear loader
+    window.setupPdfPageNavigation(container, pdf.numPages);
+    
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      if (thisToken !== activePdfRenderToken) return; // Discard stale render
+      const page = await pdf.getPage(pageNum);
+      if (thisToken !== activePdfRenderToken) return; // Discard stale render
+      
+      // Determine viewport scale based on container width
+      const containerWidth = container.clientWidth || 400;
+      const targetWidth = Math.max(containerWidth - 24, 300); // Base display width
+      
+      const originalViewport = page.getViewport({ scale: 1 });
+      const baseScale = targetWidth / originalViewport.width;
+      
+      // Render canvas with higher resolution (scale multiplier 1.5x of target width) to keep it crisp on zoom
+      const renderScale = baseScale * 1.5;
+      const viewport = page.getViewport({ scale: renderScale });
+      
+      // Create page wrapper
+      const pageWrapper = document.createElement("div");
+      pageWrapper.className = "answer-pdf-page-wrapper";
+      pageWrapper.dataset.pageNum = pageNum;
+      pageWrapper.dataset.baseWidth = targetWidth; // Store 100% display width
+      pageWrapper.style.position = "relative";
+      pageWrapper.style.width = `${targetWidth}px`; // Start at 100% zoom width
+      pageWrapper.style.margin = "0 auto 4px auto";
+      pageWrapper.style.display = "flex";
+      pageWrapper.style.flexDirection = "column";
+      pageWrapper.style.alignItems = "center";
+      
+      const canvas = document.createElement("canvas");
+      canvas.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.25)";
+      canvas.style.borderRadius = "6px";
+      canvas.style.backgroundColor = "white";
+      canvas.style.width = "100%"; // Auto-scale dynamically with container width!
+      canvas.style.height = "auto";
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      
+      pageWrapper.appendChild(canvas);
+      
+      const pageNumLabel = document.createElement("div");
+      pageNumLabel.textContent = `Trang ${pageNum} / ${pdf.numPages}`;
+      pageNumLabel.style.color = "#94a3b8";
+      pageNumLabel.style.fontSize = "0.7rem";
+      pageNumLabel.style.fontWeight = "600";
+      pageNumLabel.style.marginTop = "6px";
+      pageNumLabel.style.marginBottom = "16px";
+      pageWrapper.appendChild(pageNumLabel);
+      
+      container.appendChild(pageWrapper);
+      
+      const context = canvas.getContext("2d");
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+      
+      await page.render(renderContext).promise;
+      drawPdfWatermark(context, canvas.width, canvas.height);
+    }
+    
+    // Call zoom scaling update once to enforce current zoom selection
+    if (thisToken === activePdfRenderToken) {
+      updateAnswerZoom();
+    }
+    
+  } catch (error) {
+    console.error("Error rendering PDF with PDF.js:", error);
+    if (thisToken === activePdfRenderToken) {
+      container.style.display = "none";
+      const fallback = document.getElementById("gradeModalAnswerPdfFallback");
+      if (fallback) {
+        fallback.style.display = "flex";
+        const nameEl = document.getElementById("gradeModalAnswerPdfName");
+        if (nameEl) nameEl.textContent = file.name;
+        const linkEl = document.getElementById("gradeModalAnswerPdfLink");
+        if (linkEl) linkEl.href = URL.createObjectURL(file);
+      }
+    }
+  }
+}
+
+function loadLocalAnswerKeyFile(file) {
+  if (!file) return;
+
+  const container = document.getElementById("gradeModalAnswerKeyContainer");
+  const uploadZone = document.getElementById("gradeModalAnswerKeyUploadZone");
+  const toolbar = document.getElementById("gradeModalAnswerKeyToolbar");
+  const viewer = document.getElementById("gradeModalAnswerKeyViewer");
+
+  const iframe = document.getElementById("gradeModalAnswerIframe");
+  const img = document.getElementById("gradeModalAnswerImg");
+  const imgWrapper = document.getElementById("gradeModalAnswerImgWrapper");
+  const canvasContainer = document.getElementById("gradeModalAnswerPdfCanvasContainer");
+  const fallback = document.getElementById("gradeModalAnswerPdfFallback");
+
+  const fileURL = URL.createObjectURL(file);
+
+  currentAnswerPdfFile = file;
+  answerZoomScale = 1.0;
+  const percentEl = document.getElementById("answerZoomPercent");
+  if (percentEl) percentEl.textContent = "100%";
+
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    answerFileType = "pdf";
+    if (iframe) {
+      iframe.src = "";
+      iframe.style.display = "none";
+    }
+    if (img) {
+      img.src = "";
+      img.style.display = "none";
+    }
+    if (imgWrapper) {
+      imgWrapper.style.display = "none";
+    }
+    if (fallback) {
+      fallback.style.display = "none";
+    }
+    
+    // Render using our super smooth local canvas viewer!
+    if (canvasContainer) {
+      renderPdfToCanvases(file);
+    } else {
+      if (fallback) {
+        fallback.style.display = "flex";
+        const nameEl = document.getElementById("gradeModalAnswerPdfName");
+        if (nameEl) nameEl.textContent = file.name;
+        const linkEl = document.getElementById("gradeModalAnswerPdfLink");
+        if (linkEl) linkEl.href = fileURL;
+      }
+    }
+  } else if (file.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)) {
+    answerFileType = "image";
+    if (fallback) fallback.style.display = "none";
+    if (canvasContainer) {
+      canvasContainer.innerHTML = "";
+      canvasContainer.style.display = "none";
+    }
+    if (img) {
+      img.src = fileURL;
+      img.style.transform = "scale(1)";
+      img.style.display = "inline-block";
+    }
+    if (imgWrapper) {
+      imgWrapper.style.display = "flex";
+    }
+    if (iframe) {
+      iframe.src = "";
+      iframe.style.display = "none";
+    }
+  }
+
+  // Toggle visible containers
+  if (uploadZone) uploadZone.style.display = "none";
+  if (toolbar) toolbar.style.display = "flex";
+  if (viewer) viewer.style.display = "flex";
+  if (container) container.style.display = "flex";
+}
+
+function handleLocalAnswerKey(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (currentGradingExamTitle) {
+    const normTitle = currentGradingExamTitle.trim().toLowerCase();
+    answerKeyCache[normTitle] = file;
+  }
+
+  loadLocalAnswerKeyFile(file);
+}
+
+function closeLocalAnswerKey(shouldDeleteFromCache = false) {
+  if (shouldDeleteFromCache && currentGradingExamTitle) {
+    const normTitle = currentGradingExamTitle.trim().toLowerCase();
+    delete answerKeyCache[normTitle];
+  }
+
+  const container = document.getElementById("gradeModalAnswerKeyContainer");
+  const uploadZone = document.getElementById("gradeModalAnswerKeyUploadZone");
+  const toolbar = document.getElementById("gradeModalAnswerKeyToolbar");
+  const viewer = document.getElementById("gradeModalAnswerKeyViewer");
+
+  const iframe = document.getElementById("gradeModalAnswerIframe");
+  const img = document.getElementById("gradeModalAnswerImg");
+  const imgWrapper = document.getElementById("gradeModalAnswerImgWrapper");
+  const canvasContainer = document.getElementById("gradeModalAnswerPdfCanvasContainer");
+  const fallback = document.getElementById("gradeModalAnswerPdfFallback");
+  const input = document.getElementById("localAnswerKeyInput");
+
+  currentAnswerPdfFile = null;
+  answerZoomScale = 1.0;
+  answerFileType = "";
+
+  if (iframe) {
+    iframe.src = "";
+    iframe.style.display = "none";
+  }
+  if (img) {
+    img.src = "";
+    img.style.transform = "scale(1)";
+    img.style.display = "none";
+  }
+  if (imgWrapper) {
+    imgWrapper.style.display = "none";
+  }
+  if (canvasContainer) {
+    canvasContainer.innerHTML = "";
+    canvasContainer.style.display = "none";
+  }
+  if (fallback) {
+    fallback.style.display = "none";
+  }
+  if (input) input.value = "";
+
+  // Toggle visible containers
+  if (uploadZone) uploadZone.style.display = "flex";
+  if (toolbar) toolbar.style.display = "none";
+  if (viewer) viewer.style.display = "none";
+  if (container) container.style.display = "flex"; // Keep container displayed!
+}
+
+function closeGradeModal() {
+  document.getElementById("adminGradeExamModal").style.display = "none";
+  
+  const examIframe = document.getElementById("gradeModalExamIframe");
+  if (examIframe) examIframe.src = "";
+  
+  const pdfIframe = document.getElementById("gradeModalPdfIframe");
+  if (pdfIframe) pdfIframe.src = "";
+  
+  if (window.currentGradingOriginalExamFileId) {
+    if (window.google && window.google.script && window.google.script.run && typeof window.google.script.run.revokeFileAccess === "function") {
+      window.google.script.run.revokeFileAccess(window.currentGradingOriginalExamFileId, sessionStorage.getItem("userEmail") || "");
+    }
+    window.currentGradingOriginalExamFileId = "";
+  }
+  
+  closeLocalAnswerKey(false);
+}
+
+// =========================================================
+// INDEXEDDB BACKGROUND SYNC QUEUE ENGINE FOR PDF & GRADING
+// =========================================================
+const SYNC_DB_NAME = "GradingSyncDB";
+const SYNC_STORE_NAME = "syncQueue";
+
+function openGradingDB() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const request = indexedDB.open(SYNC_DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(SYNC_STORE_NAME)) {
+        db.createObjectStore(SYNC_STORE_NAME, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = () => resolve(null);
+  });
+}
+
+window.saveSyncQueueItem = async function(item) {
+  try {
+    const db = await openGradingDB();
+    if (!db) return false;
+    const tx = db.transaction(SYNC_STORE_NAME, "readwrite");
+    tx.objectStore(SYNC_STORE_NAME).put(item);
+    return new Promise((resolve) => {
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (err) {
+    console.error("IDB saveSyncQueueItem error:", err);
+    return false;
+  }
+};
+
+window.getAllSyncQueueItems = async function() {
+  try {
+    const db = await openGradingDB();
+    if (!db) return [];
+    const tx = db.transaction(SYNC_STORE_NAME, "readonly");
+    const store = tx.objectStore(SYNC_STORE_NAME);
+    const request = store.getAll();
+    return new Promise((resolve) => {
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  } catch (err) {
+    return [];
+  }
+};
+
+window.removeSyncQueueItem = async function(id) {
+  try {
+    const db = await openGradingDB();
+    if (!db) return false;
+    const tx = db.transaction(SYNC_STORE_NAME, "readwrite");
+    tx.objectStore(SYNC_STORE_NAME).delete(id);
+    return new Promise((resolve) => {
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (err) {
+    return false;
+  }
+};
+
+let isSyncQueueProcessing = false;
+
+window.updateSyncBadgeUI = async function(providedItems) {
+  const items = providedItems || (await getAllSyncQueueItems());
+  const badge = document.getElementById("bgSyncQueueBadge");
+  const icon = document.getElementById("bgSyncIcon");
+  const text = document.getElementById("bgSyncText");
+  const pill = document.getElementById("bgSyncPill");
+  const listEl = document.getElementById("bgSyncQueueList");
+
+  if (!badge) return;
+
+  const count = items.length;
+  if (count === 0) {
+    badge.style.display = "none";
+    const popover = document.getElementById("bgSyncQueuePopover");
+    if (popover) popover.style.display = "none";
+  } else {
+    badge.style.display = "flex";
+    if (icon) icon.textContent = "⚡";
+    if (text) text.textContent = `Hàng chờ đồng bộ: ${count} bài`;
+    if (pill) {
+      pill.textContent = count;
+      pill.style.display = "inline-block";
+    }
+    badge.style.background = "#1e293b";
+    badge.style.borderColor = "#3b82f6";
+  }
+
+  if (listEl) {
+    if (count === 0) {
+      listEl.innerHTML = `
+        <div style="text-align: center; color: #64748b; padding: 20px 10px;">
+          <div style="font-size: 1.8rem; margin-bottom: 6px;">🎉</div>
+          <div>Không có bài làm nào trong hàng chờ. Dữ liệu đã được ghi đè an toàn lên Google Drive.</div>
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = items.map(item => `
+        <div style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; justify-content: space-between; font-weight: 700; color: #1e293b;">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">${item.email}</span>
+            <span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: ${item.status === 'syncing' ? '#eff6ff' : (item.status === 'failed' ? '#fef2f2' : '#f1f5f9')}; color: ${item.status === 'syncing' ? '#2563eb' : (item.status === 'failed' ? '#ef4444' : '#475569')};">
+              ${item.status === 'syncing' ? '🔄 Đang đồng bộ...' : (item.status === 'failed' ? '⚠️ Tự động thử lại' : '⏳ Chờ đến lượt')}
+            </span>
+          </div>
+          <div style="color: #64748b; font-size: 0.72rem;">${item.examTitle || item.fileName || 'Bài làm'} • Điểm: ${item.score || 'Ghi đè PDF'}</div>
+        </div>
+      `).join("");
+    }
+  }
+};
+
+window.toggleSyncQueuePopover = function() {
+  const pop = document.getElementById("bgSyncQueuePopover");
+  if (!pop) return;
+  if (pop.style.display === "none" || pop.style.display === "") {
+    pop.style.display = "flex";
+    updateSyncBadgeUI();
+  } else {
+    pop.style.display = "none";
+  }
+};
+
+window.processBackgroundSyncQueue = async function(manualTrigger) {
+  if (isSyncQueueProcessing) return;
+  if (!navigator.onLine) {
+    updateSyncBadgeUI();
+    return;
+  }
+
+  isSyncQueueProcessing = true;
+  const items = await getAllSyncQueueItems();
+  await updateSyncBadgeUI(items);
+
+  for (const item of items) {
+    if (!navigator.onLine) break;
+
+    item.status = "syncing";
+    await saveSyncQueueItem(item);
+    await updateSyncBadgeUI();
+
+    let scoreSuccess = true;
+    let pdfSuccess = true;
+
+    // 1. Sync score & remark
+    if (item.score !== undefined && item.score !== null) {
+      try {
+        if (item.type === 'exam') {
+          const resObj = await new Promise((res, rej) => {
+            google.script.run
+              .withSuccessHandler(res)
+              .withFailureHandler(rej)
+              .adminGradeSubmission(item.email, item.examTitle, item.score, item.remark || "");
+          });
+          if (!resObj || resObj.success === false) {
+            console.error("adminGradeSubmission error:", resObj);
+            scoreSuccess = false;
+          }
+        } else {
+          const resObj = await new Promise((res, rej) => {
+            google.script.run
+              .withSuccessHandler(res)
+              .withFailureHandler(rej)
+              .saveHomeworkGradeAndRemark(item.email, item.examTitle, item.score, item.remark || "");
+          });
+          if (!resObj || resObj.success === false) {
+            console.error("saveHomeworkGradeAndRemark error:", resObj);
+            scoreSuccess = false;
+          }
+        }
+      } catch (err) {
+        console.error("Score sync failed for " + item.email, err);
+        scoreSuccess = false;
+      }
+    }
+
+    // 2. Sync PDF file overwrite to Drive
+    if (item.pdfBase64) {
+      try {
+        const driveRes = await new Promise((res, rej) => {
+          google.script.run
+            .withSuccessHandler(res)
+            .withFailureHandler(rej)
+            .overwriteStudentSubmissionPdf(
+              item.pdfBase64,
+              item.fileName,
+              item.email,
+              item.type,
+              item.examTitle
+            );
+        });
+        if (!driveRes || !driveRes.success) {
+          pdfSuccess = false;
+        }
+      } catch (err) {
+        console.error("PDF overwrite sync failed for " + item.email, err);
+        pdfSuccess = false;
+      }
+    }
+
+    if (scoreSuccess && pdfSuccess) {
+      await removeSyncQueueItem(item.id);
+      if (manualTrigger || items.length === 1) {
+        showToast(`⚡ Đã ghi đè Google Drive thành công bài làm của ${item.email}!`, "success");
+      }
+    } else {
+      item.retries = (item.retries || 0) + 1;
+      item.status = "failed";
+      await saveSyncQueueItem(item);
+    }
+  }
+
+  isSyncQueueProcessing = false;
+  const remaining = await getAllSyncQueueItems();
+  await updateSyncBadgeUI(remaining);
+};
+
+// Listeners
+window.addEventListener("DOMContentLoaded", () => {
+  updateSyncBadgeUI();
+});
+setTimeout(() => {
+  updateSyncBadgeUI();
+}, 500);
+
+window.addEventListener("online", () => {
+  processBackgroundSyncQueue();
+});
+setInterval(() => {
+  processBackgroundSyncQueue();
+}, 8000);
+
+// Helper for compiling drawing strokes on PDF in memory (~0.05s)
+window.getCompiledPdfBase64FromDrawing = async function(type) {
+  if (!window.pdfFileBytes) return null;
+  if (typeof PDFLib === "undefined") return null;
+
+  const { PDFDocument, rgb } = PDFLib;
+  const pdfDoc = await PDFDocument.load(window.pdfFileBytes);
+  const pages = pdfDoc.getPages();
+  const canvases = document.querySelectorAll(type === 'exam' ? '#gradeModalDrawingContainer canvas' : '#homeworkGradeModalDrawingContainer canvas');
+
+  if (!canvases || canvases.length === 0) return null;
+
+  const parseColor = (colorStr) => {
+    try {
+      if (colorStr === '#ef4444') return rgb(0.93, 0.27, 0.27);
+      if (colorStr === '#3b82f6') return rgb(0.23, 0.51, 0.96);
+      if (colorStr === '#10b981') return rgb(0.06, 0.72, 0.51);
+      if (colorStr === '#eab308') return rgb(0.91, 0.70, 0.03);
+      if (colorStr && colorStr.startsWith('#')) {
+        const hex = colorStr.replace('#', '');
+        if (hex.length === 6) {
+          const r = parseInt(hex.slice(0, 2), 16) / 255;
+          const g = parseInt(hex.slice(2, 4), 16) / 255;
+          const b = parseInt(hex.slice(4, 6), 16) / 255;
+          if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return rgb(r, g, b);
+        }
+      }
+    } catch(e) {}
+    return rgb(0.93, 0.27, 0.27);
+  };
+
+  let hasStrokes = false;
+  canvases.forEach((c) => {
+    const pageNum = parseInt(c.dataset.pageNum);
+    const scale = parseFloat(c.dataset.scale) || 1.0;
+    const strokes = window.drawingStrokes ? (window.drawingStrokes[pageNum] || []) : [];
+    if (strokes.length > 0 && pageNum <= pages.length) {
+      hasStrokes = true;
+      const pdfPage = pages[pageNum - 1];
+      const { width, height } = pdfPage.getSize();
+
+      strokes.forEach(stroke => {
+        if (!stroke) return;
+        if (stroke.type === 'text') {
+          if (!stroke.text) return;
+          const color = parseColor(stroke.color);
+          const pdfX = (stroke.nx !== undefined ? stroke.nx * width : stroke.x / scale);
+          const pdfY = height - (stroke.ny !== undefined ? stroke.ny * height : stroke.y / scale);
+          try {
+            pdfPage.drawText(String(stroke.text), {
+              x: Math.max(10, pdfX),
+              y: Math.max(10, pdfY - 12),
+              size: (stroke.fontSize || 14),
+              color: color
+            });
+          } catch(e) {}
+          return;
+        }
+
+        if (!stroke.points || stroke.points.length < 2) return;
+        const color = parseColor(stroke.color);
+        const isHighlight = stroke.color.includes('0.4') || stroke.color.startsWith('rgba');
+        const opacity = isHighlight ? 0.4 : 1.0;
+        const thickness = (isHighlight ? 20 : 2) / scale;
+
+        for (let i = 0; i < stroke.points.length - 1; i++) {
+          const p1 = stroke.points[i];
+          const p2 = stroke.points[i+1];
+          const x1 = p1.x / scale;
+          const y1 = height - (p1.y / scale);
+          const x2 = p2.x / scale;
+          const y2 = height - (p2.y / scale);
+
+          pdfPage.drawLine({
+            start: { x: x1, y: y1 },
+            end: { x: x2, y: y2 },
+            thickness: thickness,
+            color: color,
+            opacity: opacity
+          });
+        }
+      });
+    }
+  });
+
+  if (!hasStrokes) return null;
+
+  const pdfBytes = await pdfDoc.save();
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+window.goToNextExamSubmission = function(currentEmail, currentExamTitle) {
+  if (!window.adminAllSubmissions || !Array.isArray(window.adminAllSubmissions)) return;
+  let list = window.adminAllSubmissions;
+  if (currentExamTitle) {
+    list = list.filter(s => s.examTitle === currentExamTitle);
+  }
+  const currentIndex = list.findIndex(s => s.email === currentEmail);
+  if (currentIndex !== -1 && currentIndex + 1 < list.length) {
+    const nextSub = list[currentIndex + 1];
+    showToast(`⚡ Chuyển sang bài làm của ${nextSub.email} (${currentIndex + 2}/${list.length})`, "info");
+    openGradeModal(nextSub.email, nextSub.examTitle, nextSub.timestamp, nextSub.fileUrl, nextSub.score || "");
+  } else {
+    showToast("🎉 Đã hoàn tất chấm toàn bộ bài làm trong danh sách này!", "success");
+    closeGradeModal();
+  }
+};
+
+window.goToNextHomeworkSubmission = function(currentEmail, currentFileTitle) {
+  let list = window.currentHomeworkPanelSubmissions || window.allAdminHomeworkSubmissions;
+  if (!list || !Array.isArray(list)) return;
+  if (currentFileTitle) {
+    list = list.filter(s => s.fileTitle === currentFileTitle);
+  }
+  const currentIndex = list.findIndex(s => s.email === currentEmail);
+  if (currentIndex !== -1 && currentIndex + 1 < list.length) {
+    const nextSub = list[currentIndex + 1];
+    showToast(`⚡ Chuyển sang bài tập của ${nextSub.email} (${currentIndex + 2}/${list.length})`, "info");
+    openHomeworkGradeModal(nextSub.email, nextSub.fileTitle, nextSub.timestamp, nextSub.fileUrl, nextSub.score || "", window.currentGradingHomeworkFileId);
+  } else {
+    showToast("🎉 Đã hoàn tất chấm toàn bộ bài tập trong danh sách này!", "success");
+    closeHomeworkGradeModal();
+  }
+};
+
+function openGradeModal(email, examTitle, timestamp, fileUrl, score) {
+  // Lấy nhận xét từ bộ nhớ đệm (adminAllSubmissions) dựa trên email, examTitle và timestamp
+  let remark = "";
+  if (typeof adminAllSubmissions !== "undefined" && Array.isArray(adminAllSubmissions)) {
+    const foundSub = adminAllSubmissions.find(s => 
+      s.email === email && 
+      s.examTitle === examTitle && 
+      s.timestamp === timestamp
+    );
+    if (foundSub) {
+      remark = foundSub.remark || "";
+    }
+  }
+
+  const parsed = parseScoreWithComponentsJS(score);
+
+  currentGradingExamTitle = examTitle; // Lưu tiêu đề đề thi hiện tại đang chấm
+
+  // Tự động kiểm tra và tải đáp án đã lưu trong bộ nhớ tạm cho loại đề này
+  if (examTitle) {
+    const normTitle = examTitle.trim().toLowerCase();
+    const cachedFile = answerKeyCache[normTitle];
+    if (cachedFile) {
+      loadLocalAnswerKeyFile(cachedFile);
+    } else {
+      // Nếu không có, tạm ẩn bảng đáp án cũ đi để tránh nhầm lẫn
+      closeLocalAnswerKey(false);
+    }
+  } else {
+    closeLocalAnswerKey(false);
+  }
+
+  document.getElementById("gradeModalEmail").textContent = email;
+  document.getElementById("gradeModalExamTitle").textContent = examTitle;
+  document.getElementById("gradeModalTimestamp").textContent = timestamp;
+  
+  const fileLink = document.getElementById("gradeModalFileLink");
+  if (fileLink) {
+    fileLink.href = fileUrl;
+  }
+  
+  const pdfIframe = document.getElementById("gradeModalPdfIframe");
+  if (pdfIframe) {
+    pdfIframe.src = getEmbedPdfUrl(fileUrl);
+  }
+
+  // Load original exam paper ("Đề thi gốc") in the top-left panel automatically
+  const examIframe = document.getElementById("gradeModalExamIframe");
+  const examLink = document.getElementById("gradeModalExamLink");
+  const noExamPlaceholder = document.getElementById("gradeModalNoExamPlaceholder");
+  
+  function tryMatchAndLoad() {
+    function isCloseMatch(s1, s2) {
+      if (!s1 || !s2) return false;
+      s1 = s1.trim().toLowerCase();
+      s2 = s2.trim().toLowerCase();
+      if (s1 === s2) return true;
+      
+      const getBigrams = (str) => {
+        const bigrams = [];
+        for (let i = 0; i < str.length - 1; i++) {
+          bigrams.push(str.substring(i, i + 2));
+        }
+        return bigrams;
+      };
+      
+      const b1 = getBigrams(s1);
+      const b2 = getBigrams(s2);
+      if (b1.length === 0 || b2.length === 0) {
+        return s1 === s2;
+      }
+      
+      let intersection = 0;
+      const b2Copy = [...b2];
+      b1.forEach(bg => {
+        const idx = b2Copy.indexOf(bg);
+        if (idx !== -1) {
+          intersection++;
+          b2Copy.splice(idx, 1);
+        }
+      });
+      
+      const similarity = (2.0 * intersection) / (b1.length + b2.length);
+      return similarity >= 0.9;
+    }
+
+    let examUrl = "";
+    let matchedFileId = "";
+    if (examTitle) {
+      const cleanExamTitle = examTitle.trim().toLowerCase();
+      
+      // 1. Search in allMockExams with exact and soft include matching
+      if (typeof allMockExams !== 'undefined' && Array.isArray(allMockExams)) {
+        const match = allMockExams.find(e => {
+          if (!e.title) return false;
+          const t = e.title.trim().toLowerCase();
+          return t === cleanExamTitle || isCloseMatch(t, cleanExamTitle);
+        });
+        if (match && match.fileId) {
+          matchedFileId = match.fileId;
+          examUrl = "https://drive.google.com/file/d/" + match.fileId + "/preview";
+        }
+      }
+      
+      // 2. Search in allExams if not found
+      if (!examUrl && typeof allExams !== 'undefined' && Array.isArray(allExams)) {
+        const match = allExams.find(e => {
+          if (!e.title) return false;
+          const t = e.title.trim().toLowerCase();
+          return t === cleanExamTitle || isCloseMatch(t, cleanExamTitle);
+        });
+        if (match && match.fileId) {
+          matchedFileId = match.fileId;
+          examUrl = "https://drive.google.com/file/d/" + match.fileId + "/preview";
+        }
+      }
+    }
+
+    if (examUrl) {
+      // Tự động cấp quyền truy cập file Đề thi gốc trên Drive cho tài khoản Admin đang chấm bài
+      if (matchedFileId) {
+        if (window.currentGradingOriginalExamFileId && window.currentGradingOriginalExamFileId !== matchedFileId) {
+          const oldExamId = window.currentGradingOriginalExamFileId;
+          google.script.run.revokeFileAccess(oldExamId, sessionStorage.getItem("userEmail") || "");
+        }
+        window.currentGradingOriginalExamFileId = matchedFileId;
+
+        google.script.run
+          .withSuccessHandler(function(res) {
+            console.log("Auto-shared original exam fileId " + matchedFileId + " to Admin:", res);
+          })
+          .withFailureHandler(function(err) {
+            console.error("Error auto-sharing exam to Admin:", err);
+          })
+          .shareExamToAdmin(matchedFileId);
+      }
+
+      if (examIframe) {
+        examIframe.src = examUrl;
+        examIframe.style.display = "block";
+      }
+      if (noExamPlaceholder) noExamPlaceholder.style.display = "none";
+      if (examLink) {
+        examLink.href = examUrl;
+        examLink.style.display = "inline-flex";
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Attempt to match immediately
+  const isMatched = tryMatchAndLoad();
+  
+  if (!isMatched) {
+    // If not found, show elegant loading indicator in the placeholder
+    if (examIframe) examIframe.style.display = "none";
+    if (examLink) examLink.style.display = "none";
+    if (noExamPlaceholder) {
+      noExamPlaceholder.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <div style="width: 24px; height: 24px; border: 2.5px solid rgba(255,255,255,0.15); border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <span>Đang tìm kiếm Đề thi gốc từ hệ thống...</span>
+        </div>
+      `;
+      noExamPlaceholder.style.display = "flex";
+    }
+    
+    // Trigger on-the-fly fetches for both lists in parallel to resolve the file!
+    let examsLoaded = false;
+    let mockExamsLoaded = false;
+    
+    function checkCompletion() {
+      if (examsLoaded && mockExamsLoaded) {
+        const doubleCheck = tryMatchAndLoad();
+        if (!doubleCheck && noExamPlaceholder) {
+          noExamPlaceholder.innerHTML = `
+            <span>🔍 Không tìm thấy file Đề thi gốc của đề "${examTitle}" trong hệ thống.<br><small style="color: #a1a1aa; font-size: 0.75rem; display: inline-block; margin-top: 4px;">(Vui lòng kiểm tra lại tên đề thi trong mục Tài liệu hoặc Đề thi thử)</small></span>
+          `;
+          noExamPlaceholder.style.display = "flex";
+        }
+      }
+    }
+    
+    google.script.run.withSuccessHandler(function(exams) {
+      if (exams && Array.isArray(exams)) {
+        allExams = exams;
+      }
+      examsLoaded = true;
+      checkCompletion();
+    }).withFailureHandler(() => {
+      examsLoaded = true;
+      checkCompletion();
+    }).getExams();
+    
+    google.script.run.withSuccessHandler(function(res) {
+      if (res && res.success && res.data) {
+        allMockExams = res.data;
+      }
+      mockExamsLoaded = true;
+      checkCompletion();
+    }).withFailureHandler(() => {
+      mockExamsLoaded = true;
+      checkCompletion();
+    }).getMockExams();
+  }
+  
+  document.getElementById("gradeModalScoreInput").value = parsed.total || "";
+  document.getElementById("gradeModalRemarkInput").value = remark || "";
+  
+  const statusDiv = document.getElementById("gradeModalStatus");
+  if (statusDiv) {
+    statusDiv.innerHTML = "";
+  }
+  
+  const numInput = document.getElementById("gradeModalNumQuestions");
+  if (numInput) {
+    if (parsed.components.length > 0) {
+      numInput.value = parsed.components.length;
+    } else if (parsed.total && parsed.total !== "") {
+      numInput.value = "0"; // Chấm tự do nếu có sẵn điểm mà không có điểm thành phần
+    } else {
+      numInput.value = "12"; // Chưa chấm thì mặc định 12 câu
+    }
+  }
+  
+  generateQuestionGrades();
+
+  // Điền giá trị điểm thành phần nếu có
+  if (parsed.components.length > 0) {
+    const inputs = document.querySelectorAll(".question-score-input");
+    inputs.forEach((input, index) => {
+      if (parsed.components[index] !== undefined) {
+        input.value = parsed.components[index].toString().replace(/\./g, ",");
+      }
+    });
+    calculateTotalScoreFromQuestions();
+  }
+  
+  document.getElementById("adminGradeExamModal").style.display = "flex";
+
+  // Auto-render PDF canvas in "Bài làm của học sinh" frame directly without extra click
+  setTimeout(() => {
+    enableDrawingMode('exam');
+  }, 50);
+}
+
+function revokeAllSharedExamsForAdmin() {
+  showConfirmModal(
+    'Thu hồi quyền truy cập? 🔒',
+    'Bạn có chắc chắn muốn kết thúc phiên làm việc và thu hồi toàn bộ quyền truy cập các file đề thi gốc đã mở không?',
+    () => { executeRevokeAllSharedExamsForAdmin(); },
+    '🔒',
+    'Thu hồi ngay'
+  );
+}
+
+function executeRevokeAllSharedExamsForAdmin() {
+  // Show a visual loading indicator or toast if possible
+  const btn = document.querySelector('button[onclick="revokeAllSharedExamsForAdmin()"]');
+  let originalHtml = "";
+  if (btn) {
+    originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span>⏳ Đang thu hồi quyền...</span>`;
+    btn.disabled = true;
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (btn) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+      }
+      if (res && res.success) {
+        showCustomAlert(res.message || "Đã thu hồi tất cả các quyền thành công.");
+      } else {
+        showCustomAlert("Có lỗi: " + (res ? res.message : "Không thể thu hồi."));
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (btn) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+      }
+      showCustomAlert("Lỗi kết nối hệ thống: " + (err ? err.message : "Chưa rõ nguyên nhân"));
+    })
+    .revokeAllAdminSharedFiles();
+}
+
+function generateQuestionGrades() {
+  const numInput = document.getElementById("gradeModalNumQuestions");
+  const questionsContainer = document.getElementById("gradeModalQuestionsContainer");
+  
+  if (!numInput || !questionsContainer) return;
+  
+  let numQuestions = parseInt(numInput.value) || 0;
+  
+  if (numQuestions <= 0) {
+    questionsContainer.style.display = "none";
+    return;
+  }
+  
+  questionsContainer.style.display = "grid";
+  
+  const isDark = document.body.classList.contains("dark-mode");
+  questionsContainer.innerHTML = "";
+  for (let i = 1; i <= numQuestions; i++) {
+    const div = document.createElement("div");
+    div.className = "question-grid-card";
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    div.style.justifyContent = "space-between";
+    div.style.padding = "10px 12px";
+    div.style.background = isDark ? "#131c2e" : "white";
+    div.style.borderRadius = "10px";
+    div.style.border = isDark ? "1px solid #1e293b" : "1px solid #e2e8f0";
+    div.style.boxShadow = "0 1px 2px rgba(0,0,0,0.02)";
+    div.style.transition = "all 0.15s ease-in-out";
+    
+    div.innerHTML = `
+      <span style="font-weight: 700; font-size: 0.8rem; color: ${isDark ? '#cbd5e1' : '#475569'}; white-space: nowrap; flex-shrink: 0;">Câu ${i}</span>
+      <div style="display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; flex-shrink: 0;">
+        <input type="text" class="question-score-input" data-qindex="${i}" value="0" oninput="onQuestionScoreInput(this)" style="width: 55px; height: 28px; padding: 2px 6px; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; border-radius: 6px; font-size: 0.8rem; text-align: center; font-weight: bold; color: ${isDark ? '#f1f5f9' : '#1e293b'}; outline: none; background: ${isDark ? '#0f172a' : 'white'};" title="Điểm câu ${i}" />
+        <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600; flex-shrink: 0;">đ</span>
+      </div>
+    `;
+    questionsContainer.appendChild(div);
+  }
+  
+  calculateTotalScoreFromQuestions();
+}
+
+function onQuestionScoreInput(inputEl) {
+  // Replace dot with comma
+  inputEl.value = inputEl.value.replace(/\./g, ",");
+  // Only allow digits and a single comma
+  inputEl.value = inputEl.value.replace(/[^0-9,]/g, "");
+  const parts = inputEl.value.split(",");
+  if (parts.length > 2) {
+    inputEl.value = parts[0] + "," + parts.slice(1).join("");
+  }
+
+  const val = parseFloat(inputEl.value.replace(/,/g, ".")) || 0;
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  const parentDiv = inputEl.closest('.question-grid-card');
+  if (parentDiv) {
+    if (val > 0) {
+      parentDiv.style.borderColor = "#3b82f6";
+      parentDiv.style.background = isDark ? "rgba(59, 130, 246, 0.15)" : "#eff6ff";
+    } else {
+      parentDiv.style.borderColor = isDark ? "#1e293b" : "#e2e8f0";
+      parentDiv.style.background = isDark ? "#131c2e" : "white";
+    }
+  }
+  calculateTotalScoreFromQuestions();
+}
+
+function calculateTotalScoreFromQuestions() {
+  const inputs = document.querySelectorAll(".question-score-input");
+  const numInput = document.getElementById("gradeModalNumQuestions");
+  
+  if (!numInput || parseInt(numInput.value) <= 0) return;
+  
+  let total = 0;
+  inputs.forEach(input => {
+    total += parseFloat(input.value.replace(/,/g, ".")) || 0;
+  });
+  
+  const roundedTotal = parseFloat(total.toFixed(2));
+  
+  const scoreInput = document.getElementById("gradeModalScoreInput");
+  if (scoreInput) {
+    scoreInput.value = roundedTotal.toString().replace(/\./g, ",");
+  }
+}
+
+window.adminSaveGradeNow = async function(andNext = false) {
+  const email = document.getElementById("gradeModalEmail").textContent;
+  const examTitle = document.getElementById("gradeModalExamTitle").textContent;
+  const rawScore = document.getElementById("gradeModalScoreInput").value.trim();
+  const remark = document.getElementById("gradeModalRemarkInput").value.trim();
+  const statusDiv = document.getElementById("gradeModalStatus");
+  const numInput = document.getElementById("gradeModalNumQuestions");
+  
+  if (!rawScore) {
+    statusDiv.innerHTML = `<span style="color: #ef4444; font-weight: bold;">⚠️ Vui lòng nhập điểm số!</span>`;
+    return;
+  }
+
+  // Package component scores if any
+  let finalScoreString = rawScore;
+  const numQuestions = numInput ? parseInt(numInput.value) : 0;
+  if (numQuestions > 0) {
+    const inputs = document.querySelectorAll(".question-score-input");
+    const components = [];
+    inputs.forEach(input => {
+      const val = parseFloat(input.value.replace(/,/g, "."));
+      components.push(isNaN(val) ? 0 : val);
+    });
+    if (components.length > 0) {
+      finalScoreString = rawScore + " [" + components.join(";") + "]";
+    }
+  }
+
+  // 1. Compile PDF base64 if user painted on canvas
+  let pdfBase64 = null;
+  try {
+    pdfBase64 = await window.getCompiledPdfBase64FromDrawing('exam');
+  } catch(e) {
+    console.warn("PDF compile exception:", e);
+  }
+
+  // 2. Queue into IndexedDB Background Sync Queue
+  const queueItem = {
+    id: 'grade_sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    type: 'exam',
+    email: email,
+    examTitle: examTitle,
+    score: finalScoreString,
+    remark: remark,
+    pdfBase64: pdfBase64,
+    fileName: "Exam_" + email + ".pdf",
+    timestamp: new Date().toISOString(),
+    retries: 0,
+    status: 'pending'
+  };
+
+  await saveSyncQueueItem(queueItem);
+
+  // 3. INSTANT OPTIMISTIC UI UPDATE (<0.1s)
+  if (typeof adminAllSubmissions !== "undefined" && Array.isArray(adminAllSubmissions)) {
+    const sub = adminAllSubmissions.find(s => s.email === email && s.examTitle === examTitle);
+    if (sub) {
+      sub.score = finalScoreString;
+      sub.remark = remark;
+      sub.gradedBy = sessionStorage.getItem("userDisplayName") || "Giáo viên";
+      sub.gradedAt = new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+    }
+  }
+
+  if (typeof filterAdminSubmissions === "function") {
+    filterAdminSubmissions();
+  }
+
+  statusDiv.innerHTML = `<span style="color: #16a34a; font-weight: bold;">⚡ Đã lưu điểm! Hệ thống đang đồng bộ Google Drive ngầm.</span>`;
+  showToast(`⚡ Đã lưu điểm cho ${email} thành công!`, "success");
+
+  // Trigger background worker
+  processBackgroundSyncQueue();
+
+  if (andNext) {
+    goToNextExamSubmission(email, examTitle);
+  } else {
+    setTimeout(() => {
+      closeGradeModal();
+    }, 300);
+  }
+};
+
+</script>

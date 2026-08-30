@@ -1,0 +1,1930 @@
+<script>
+
+// Các hàm helper làm sạch và lưu trữ an toàn thông tin để loại bỏ hoàn toàn các giá trị "undefined" hoặc "null" dạng chuỗi từ localStorage / sessionStorage
+const _memStorageCache = {};
+const originalSetItem = Storage.prototype.setItem;
+Storage.prototype.setItem = function(key, value) {
+  if (this === localStorage) _memStorageCache[key] = value;
+  originalSetItem.call(this, key, value);
+};
+const originalRemoveItem = Storage.prototype.removeItem;
+Storage.prototype.removeItem = function(key) {
+  if (this === localStorage) _memStorageCache[key] = null;
+  originalRemoveItem.call(this, key);
+};
+const originalClear = Storage.prototype.clear;
+Storage.prototype.clear = function() {
+  if (this === localStorage) {
+    for (let k in _memStorageCache) delete _memStorageCache[k];
+  }
+  originalClear.call(this);
+};
+
+window.addEventListener('storage', (e) => {
+  if (e.key) {
+    if (e.newValue === null) {
+      _memStorageCache[e.key] = null;
+    } else {
+      _memStorageCache[e.key] = e.newValue;
+    }
+  } else {
+    for (let k in _memStorageCache) delete _memStorageCache[k];
+  }
+});
+function getCleanLocalStorage(key) {
+  if (key in _memStorageCache) {
+    const cached = _memStorageCache[key];
+    if (cached === null || cached === "undefined" || cached === "null") return null;
+    return cached;
+  }
+  const val = localStorage.getItem(key);
+  if (val === null || val === undefined || val === "undefined" || val === "null") {
+    _memStorageCache[key] = null;
+    return null;
+  }
+  _memStorageCache[key] = val;
+  return val;
+}
+function getCleanSessionStorage(key) {
+  const val = sessionStorage.getItem(key);
+  if (val === null || val === undefined || val === "undefined" || val === "null") return null;
+  return val;
+}
+function safeSetLocalStorage(key, val) {
+  if (val === null || val === undefined || val === "undefined" || val === "null") {
+    localStorage.removeItem(key);
+    _memStorageCache[key] = null;
+  } else {
+    localStorage.setItem(key, val);
+    _memStorageCache[key] = val;
+  }
+}
+function safeSetSessionStorage(key, val) {
+  if (val === null || val === undefined || val === "undefined" || val === "null") {
+    sessionStorage.removeItem(key);
+  } else {
+    sessionStorage.setItem(key, val);
+  }
+}
+
+// Hàm safeRedirect hỗ trợ điều hướng an toàn và tin cậy tuyệt đối trong Sandbox Iframe (ví dụ: Google Sites)
+// Chỉ sử dụng gán trực tiếp window.location.href/replace độc lập, tránh tạo thẻ anchor click lập trình
+// vì hệ thống bảo mật của Google Apps Script (Warden) sẽ tự động hijack sự kiện click và ép đổi sang target="_top" gây lỗi Sandbox.
+function safeRedirect(url) {
+  if (!url) return;
+  
+  // Thêm tham số cache buster (t=timestamp) để tránh lỗi caching của Google Apps Script / trình duyệt
+  const timestamp = new Date().getTime();
+  let finalUrl = url;
+  if (url.includes('t=')) {
+    finalUrl = url.replace(/t=\d+/, 't=' + timestamp);
+  } else {
+    const separator = url.includes('?') ? '&' : '?';
+    finalUrl = url + separator + "t=" + timestamp;
+  }
+
+  console.log("safeRedirect (SPA mode) -> " + finalUrl);
+
+  try {
+    // Sử dụng window.location.replace() để thay thế URL hiện tại trong lịch sử duyệt web,
+    // giúp tránh lỗi lặp vô tận khi nhấn nút "Back" của trình duyệt.
+    // Cách này hoạt động hoàn hảo cả khi chạy trực tiếp lẫn khi bị nhúng trong iframe sandboxed (Google Sites)
+    // mà không kích hoạt cảnh báo bảo mật về "allow-top-navigation" của trình duyệt.
+    window.location.replace(finalUrl);
+  } catch (err) {
+    console.error("Lỗi điều hướng bằng replace:", err);
+    try {
+      window.location.href = finalUrl;
+    } catch (err2) {
+      console.error("Lỗi fallback điều hướng:", err2);
+    }
+  }
+}
+
+function ensureAbsoluteUrl(url) {
+  if (!url) return '';
+  var trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed) && !/^\/\//.test(trimmed)) {
+    return 'https://' + trimmed;
+  }
+  return trimmed;
+}
+
+const vipBadgeEl = document.getElementById("vipBadge");
+if (vipBadgeEl) {
+  vipBadgeEl.addEventListener("click", function () {
+    document.getElementById("roleInfoPopup").style.display = "flex";
+  });
+}
+
+function updateVipBadgeUI(role) {
+  const cleanRole = (role || "").toUpperCase().trim();
+  window.currentUserRole = cleanRole;
+  if (typeof currentUserRole !== 'undefined') {
+    currentUserRole = cleanRole;
+  }
+  
+  const vipBadge = document.getElementById("vipBadge");
+  if (!vipBadge) return;
+  
+  // Clear old classes
+  vipBadge.classList.remove("vip", "mem", "student", "ostudent", "sstudent", "admin");
+  
+  if (cleanRole === "VIP") {
+    vipBadge.textContent = "👑 VIP";
+    vipBadge.classList.add("vip");
+  } else if (cleanRole === "STUDENT") {
+    vipBadge.textContent = "🎓 STU";
+    vipBadge.classList.add("student");
+  } else if (cleanRole === "S-STUDENT") {
+    vipBadge.textContent = "⭐ S-STU";
+    vipBadge.classList.add("sstudent");
+  } else if (cleanRole === "O-STUDENT") {
+    vipBadge.textContent = "🧑‍🎓 O-STU";
+    vipBadge.classList.add("ostudent");
+  } else if (cleanRole === "ADMIN") {
+    vipBadge.textContent = "🛡️ ADMIN";
+    vipBadge.classList.add("admin");
+  } else {
+    vipBadge.textContent = "👤 MEM";
+    vipBadge.classList.add("mem");
+  }
+  vipBadge.style.display = "inline-block";
+  
+  // Also keep admin nav btn in sync if defined
+  const adminNavBtn = document.getElementById("adminNavBtn");
+  if (adminNavBtn) {
+    adminNavBtn.style.setProperty("display", cleanRole === "ADMIN" ? "flex" : "none", "important");
+  }
+}
+
+window.expandedFolders = window.expandedFolders || new Set();
+
+function shouldExpandFolderNode(data, activeFileId, type) {
+  if (!activeFileId || !data) return false;
+  
+  let files = [];
+  if (type === 'book') files = data.__books || [];
+  else if (type === 'exam') files = data.__exams || [];
+  else if (type === 'course') files = data.__courses || [];
+  else if (type === 'mockExam') files = data.__exams || []; 
+  
+  if (files.some(f => String(f.fileId) === String(activeFileId))) {
+    return true;
+  }
+  
+  if (data.__children) {
+    for (const childKey of Object.keys(data.__children)) {
+      if (shouldExpandFolderNode(data.__children[childKey], activeFileId, type)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// --- BỘ NHỚ TẠM LOCALSTORAGE (CACHE) & BATCH PREFETCH ---
+const TDS_CACHE_PREFIX = "tds_cache_v1_";
+const TDS_DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 phút
+
+const TDSStorageCache = {
+  get: function(key) {
+    try {
+      const raw = getCleanLocalStorage(TDS_CACHE_PREFIX + key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.timestamp && (Date.now() - parsed.timestamp < TDS_DEFAULT_TTL_MS)) {
+        return parsed.data;
+      }
+      return null;
+    } catch(e) {
+      return null;
+    }
+  },
+
+  getAny: function(key) {
+    try {
+      const raw = getCleanLocalStorage(TDS_CACHE_PREFIX + key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed ? parsed.data : null;
+    } catch(e) {
+      return null;
+    }
+  },
+
+  set: function(key, data) {
+    try {
+      localStorage.setItem(TDS_CACHE_PREFIX + key, JSON.stringify({
+        timestamp: Date.now(),
+        data: data
+      }));
+    } catch(e) {
+      console.warn("Lỗi lưu cache localStorage:", e);
+    }
+  },
+
+  clear: function(key) {
+    try {
+      if (key) {
+        localStorage.removeItem(TDS_CACHE_PREFIX + key);
+      } else {
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith(TDS_CACHE_PREFIX)) localStorage.removeItem(k);
+        });
+      }
+    } catch(e) {}
+  }
+};
+
+let isBannersLoaded = false;
+let isBatchDataFetching = false;
+function preloadBatchData(forceRevalidate = false) {
+  if (isBatchDataFetching) return;
+  if (!window.google || !google.script || !google.script.run || typeof google.script.run.getInitialBatchData !== "function") return;
+
+  const cachedCourses = TDSStorageCache.get("courses");
+  const cachedExams = TDSStorageCache.get("exams");
+  const cachedBooks = TDSStorageCache.get("books");
+
+  if (!forceRevalidate && cachedCourses && cachedExams && cachedBooks && isBannersLoaded) {
+    return;
+  }
+
+  isBatchDataFetching = true;
+  google.script.run
+    .withSuccessHandler(function(batch) {
+      isBatchDataFetching = false;
+      if (!batch || !batch.success) return;
+
+      if (batch.courses) {
+        TDSStorageCache.set("courses", batch.courses);
+        const changed = JSON.stringify(allCourses) !== JSON.stringify(batch.courses);
+        allCourses = batch.courses;
+        if (changed && typeof currentView !== 'undefined' && currentView === "courses" && typeof renderCourseList === "function") {
+          if (window.screenShareNotRequired || window.isScreenShareActive || isMobileOrTablet() || currentUserRole === 'ADMIN') {
+            renderCourseList(allCourses);
+          }
+        }
+      }
+      if (batch.exams) {
+        TDSStorageCache.set("exams", batch.exams);
+        const changed = JSON.stringify(allExams) !== JSON.stringify(batch.exams);
+        allExams = batch.exams;
+        if (changed && typeof currentView !== 'undefined' && currentView === "exams" && typeof renderExamList === "function") {
+          renderExamList(allExams);
+        }
+      }
+      if (batch.books) {
+        TDSStorageCache.set("books", batch.books);
+        const changed = JSON.stringify(allBooks) !== JSON.stringify(batch.books);
+        allBooks = batch.books;
+        if (changed && typeof currentView !== 'undefined' && currentView === "books" && typeof displayBooks === "function") {
+          displayBooks(allBooks);
+        }
+      }
+      if (batch.banners && Array.isArray(batch.banners)) {
+        isBannersLoaded = true;
+        ads = batch.banners;
+        if (ads.length === 0) {
+          const adPopup = document.getElementById("adPopup");
+          if (adPopup) adPopup.style.display = "none";
+        }
+        // Đã xóa showAd(0) ở đây để tránh popup quảng cáo bật lên đột ngột khi tải xong ngầm
+      }
+      if (batch.role) {
+        currentUserRole = batch.role;
+        if (typeof updateRoleBadge === "function") updateRoleBadge(batch.role);
+      }
+    })
+    .withFailureHandler(function(err) {
+      isBatchDataFetching = false;
+      console.warn("Lỗi tải gộp batch dữ liệu ban đầu:", err);
+    })
+    .getInitialBatchData();
+}
+
+let allBooks = [];
+
+function loadBooks() {
+  const loadingEl = document.getElementById("loading");
+
+  // ⚡ Step 3: Stale-While-Revalidate - Hiển thị ngay từ cache local nếu có
+  const cachedBooks = TDSStorageCache.getAny("books");
+  if (cachedBooks && Array.isArray(cachedBooks) && cachedBooks.length > 0) {
+    allBooks = cachedBooks;
+    if (currentView === "books") {
+      displayBooks(allBooks);
+      if (loadingEl) loadingEl.style.display = "none";
+    }
+  } else {
+    if (loadingEl) loadingEl.style.display = "flex";
+  }
+
+  // Tải ngầm bản mới nhất để Revalidate
+  google.script.run.withSuccessHandler(function (books) {
+    if (books && Array.isArray(books)) {
+      TDSStorageCache.set("books", books);
+      if (currentView !== "books") return;
+      if (JSON.stringify(allBooks) !== JSON.stringify(books)) {
+        allBooks = books;
+        displayBooks(books);
+      }
+      if (loadingEl) loadingEl.style.display = "none";
+    }
+  }).getBooks();
+}
+
+
+function displayBooks(books) {
+  const container = document.getElementById('bookPanel');
+  if (!container) return;
+
+  // Giữ lại ô tìm kiếm
+  const children = Array.from(container.children);
+  children.forEach(child => {
+    if (!child.classList.contains('panel-header')) {
+      container.removeChild(child);
+    }
+  });
+  
+  const root = {};
+
+  // Duyệt qua tất cả sách và dựng cây phân cấp
+  books.forEach(book => {
+    const parts = (book.folder || 'Chưa phân loại').split(" / ");
+    let node = root;
+    parts.forEach((part, i) => {
+      if (!node[part]) node[part] = { __books: [], __children: {} };
+      if (i === parts.length - 1) {
+        node[part].__books.push(book);
+      }
+      node = node[part].__children;
+    });
+  });
+
+  const treeRoot = root;
+
+  const searchInput = document.getElementById('searchInput');
+  const isSearching = searchInput && searchInput.value.trim() !== "";
+
+  function createFolderSection(name, data, level = 0, forceExpand = false, parentPath = "") {
+    const folderPath = parentPath ? `${parentPath} / ${name}` : name;
+    const isNodeActive = forceExpand || (window.expandedFolders && window.expandedFolders.has(folderPath)) || shouldExpandFolderNode(data, window.activeResourceFileId, 'book');
+    const section = document.createElement("div");
+    section.className = "exam-folder-section";
+    
+    const header = document.createElement("div");
+    header.className = `exam-folder-header level-${level}`;
+
+    header.innerHTML = `
+      <span class="title" title="${name}">📁 ${name}</span>
+      <span class="arrow">${isNodeActive ? "▼" : "▶"}</span>
+    `;
+
+    section.appendChild(header);
+
+    const content = document.createElement("div");
+    content.className = "exam-folder-content";
+    content.style.display = isNodeActive ? "block" : "none";
+
+    header.addEventListener("click", () => {
+      const isHidden = content.style.display === "none";
+      content.style.display = isHidden ? "block" : "none";
+      header.querySelector(".arrow").textContent = isHidden ? "▼" : "▶";
+      if (isHidden) {
+        if (window.expandedFolders) window.expandedFolders.add(folderPath);
+      } else {
+        if (window.expandedFolders) window.expandedFolders.delete(folderPath);
+      }
+    });
+
+    const grid = document.createElement("div");
+    grid.className = "book-grid";
+
+    data.__books
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .forEach(book => {
+        const bookDiv = document.createElement("div");
+        bookDiv.className = "book" + (book.isPaid ? " vip" : "");
+
+        bookDiv.innerHTML = `
+          <h4 title="${book.title}">${book.title}</h4>
+          <button class="read-btn ${book.isPaid ? 'vip' : ''}"
+            onclick="requestOpenBook('${book.fileId}', '${book.title}', ${book.isPaid}, 'book', '${book.folder}', this)">
+            Đọc
+          </button>
+        `;
+
+        grid.appendChild(bookDiv);
+      });
+
+    content.appendChild(grid);
+
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], level + 1, forceExpand, folderPath);
+      content.appendChild(childSection);
+    });
+
+    section.appendChild(content);
+
+    return section;
+  }
+
+  const fragment = document.createDocumentFragment();
+  Object.keys(treeRoot).sort().forEach(folder => {
+    const data = treeRoot[folder];
+    
+    // 1. Render all direct books inside this level-0 folder
+    if (data.__books && data.__books.length > 0) {
+      const grid = document.createElement("div");
+      grid.className = "book-grid";
+
+      data.__books
+        .sort((a, b) => a.title.localeCompare(b.title))
+        .forEach(book => {
+          const bookDiv = document.createElement("div");
+          bookDiv.className = "book" + (book.isPaid ? " vip" : "");
+
+          bookDiv.innerHTML = `
+            <h4 title="${book.title}">${book.title}</h4>
+            <button class="read-btn ${book.isPaid ? 'vip' : ''}"
+              onclick="requestOpenBook('${book.fileId}', '${book.title}', ${book.isPaid}, 'book', '${book.folder}', this)">
+              Đọc
+            </button>
+          `;
+
+          grid.appendChild(bookDiv);
+        });
+      fragment.appendChild(grid);
+    }
+
+    // 2. Render children of this level-0 folder as folder sections (starting at UI level 0)
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], 0, isSearching, folder);
+      fragment.appendChild(childSection);
+    });
+  });
+  container.appendChild(fragment);
+}
+
+function deductPointsForAccess(type, fileId, title) {
+  const email = sessionStorage.getItem("userEmail");
+  if (!email) return;
+
+  // Gọi Apps Script để trừ điểm và cập nhật UI
+  google.script.run.withSuccessHandler(function (newPoint) {
+    updatePointDisplay(newPoint);
+    showPointDeductionNotice(); // hiện thông báo
+  }).deductPointsAndLog(email, type, fileId, title);
+}
+
+function showPointDeductionNotice() {
+  const notice = document.createElement("div");
+  notice.className = "tds-toast";
+  notice.innerHTML = `
+    <div class="tds-toast-icon">✅</div>
+    <span>Đã sử dụng 67 🪙 để truy cập nội dung</span>
+  `;
+  document.body.appendChild(notice);
+
+  // Trigger animation
+  setTimeout(() => notice.classList.add("show"), 10);
+
+  // Remove after 3s
+  setTimeout(() => {
+    notice.classList.remove("show");
+    setTimeout(() => notice.remove(), 400);
+  }, 3000);
+}
+
+function showVipModal(message) {
+  document.getElementById("vipModalMessage").innerHTML = message || "🔒 Đây là sách dành cho <strong>VIP</strong>. Vui lòng nâng cấp VIP để truy cập.";
+  document.getElementById("vipModal").style.display = "flex";
+}
+
+function closeVipModal() {
+  const modal = document.getElementById('vipModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function closeConfirmAccess() {
+  const modal = document.getElementById('confirmAccessModal');
+  if (modal) modal.style.display = 'none';
+  if (typeof window.resetGlobalDocumentLoading === 'function') {
+    window.resetGlobalDocumentLoading();
+  }
+}
+
+function confirmAccess() {
+  // This is a placeholder for the HTML attribute, 
+  // actual logic is handled by requestOpenBook's cloneNode
+  closeConfirmAccess();
+}
+
+function setReadButtonsDisabled(disabled) {
+  document.querySelectorAll(".read-btn, .purchased-item-modern").forEach(btn => {
+    btn.disabled = disabled;
+    btn.style.opacity = disabled ? 0.5 : 1;
+    btn.style.cursor = disabled ? "not-allowed" : "pointer";
+  });
+}
+
+let isLoadingBook = false;
+let isConnectingFile = false;
+window.isGlobalDocumentLoading = false;
+window.globalDocLoadingTimeout = null;
+
+window.resetGlobalDocumentLoading = function() {
+  if (window.globalDocLoadingTimeout) {
+    clearTimeout(window.globalDocLoadingTimeout);
+    window.globalDocLoadingTimeout = null;
+  }
+  if (typeof fetchProgressInterval !== 'undefined' && fetchProgressInterval) {
+    clearInterval(fetchProgressInterval);
+    fetchProgressInterval = null;
+  }
+  if (typeof decodeProgressInterval !== 'undefined' && decodeProgressInterval) {
+    clearInterval(decodeProgressInterval);
+    decodeProgressInterval = null;
+  }
+  if (typeof window.mockExamTimerInterval !== 'undefined' && window.mockExamTimerInterval) {
+    clearInterval(window.mockExamTimerInterval);
+    window.mockExamTimerInterval = null;
+  }
+  window.isGlobalDocumentLoading = false;
+  if (typeof isConnectingFile !== 'undefined') isConnectingFile = false;
+  if (typeof isLoadingBook !== 'undefined') isLoadingBook = false;
+  if (typeof isLoading !== 'undefined') isLoading = false;
+  if (typeof window.setAllDocumentAccessButtonsDisabled === 'function') {
+    window.setAllDocumentAccessButtonsDisabled(false);
+  }
+};
+
+window.setGlobalDocumentLoading = function(loading, timeoutMs = 8000) {
+  if (window.globalDocLoadingTimeout) {
+    clearTimeout(window.globalDocLoadingTimeout);
+    window.globalDocLoadingTimeout = null;
+  }
+  if (loading) {
+    window.isGlobalDocumentLoading = true;
+    if (typeof window.setAllDocumentAccessButtonsDisabled === 'function') {
+      window.setAllDocumentAccessButtonsDisabled(true);
+    }
+    window.globalDocLoadingTimeout = setTimeout(() => {
+      console.warn("Auto-resetting global document loading state due to timeout.");
+      window.resetGlobalDocumentLoading();
+    }, timeoutMs);
+  } else {
+    window.resetGlobalDocumentLoading();
+  }
+};
+
+window.setAllDocumentAccessButtonsDisabled = function(disabled) {
+  document.querySelectorAll(".read-btn, .purchased-item-modern, .exam-button, .btn-option-primary, .qa-delete-btn, .purchased-item-btn").forEach(btn => {
+    btn.disabled = disabled;
+    if (disabled) {
+      btn.style.opacity = "0.5";
+      btn.style.cursor = "not-allowed";
+      btn.style.pointerEvents = "none";
+    } else {
+      btn.style.opacity = "";
+      btn.style.cursor = "";
+      btn.style.pointerEvents = "";
+    }
+  });
+};
+
+function readBook(fileId, title, alreadyShared = false) {
+  if (isMobileOrTablet()) hideLeftPanel();
+
+  if (snakeGameRunning) {
+    snakeGameRunning = false;
+    if (typeof interval !== "undefined") clearTimeout(interval);
+  }
+
+  currentEmail = sessionStorage.getItem("userEmail") || "";
+
+  const viewer = document.getElementById('bookViewer');
+  if (fileId && !openedFileIds.includes(fileId)) {
+    openedFileIds.push(fileId);
+  }
+
+  if (alreadyShared) {
+    renderReaderContent(viewer, fileId, title, false, false, false, false);
+    isLoadingBook = false;
+    if (typeof window.resetGlobalDocumentLoading === 'function') {
+      window.resetGlobalDocumentLoading();
+    }
+  } else {
+    renderReaderLoading(viewer, `📖 Đang cấp quyền và nạp sách "${title}"...`);
+    window.setGlobalDocumentLoading(true, 8000);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (fileId && !openedFileIds.includes(fileId)) {
+          openedFileIds.push(fileId);
+        }
+        renderReaderContent(viewer, fileId, title, false, false, false, false);
+        isLoadingBook = false;
+        if (typeof window.resetGlobalDocumentLoading === 'function') {
+          window.resetGlobalDocumentLoading();
+        }
+      })
+      .withFailureHandler(function (err) {
+        console.error("Lỗi chia sẻ file sách:", err);
+        renderReaderContent(viewer, fileId, title, false, false, false, false);
+        isLoadingBook = false;
+        if (typeof window.resetGlobalDocumentLoading === 'function') {
+          window.resetGlobalDocumentLoading();
+        }
+      })
+      .sharePurchasedFile(fileId, currentEmail);
+  }
+}
+
+function renderReaderLoading(viewer, msg) {
+  viewer.innerHTML = `
+    <div class="tds-central-state">
+      <div class="tds-spinner-wrapper">
+        <div class="spinner"></div>
+        <div class="tds-state-message bold">
+          ${msg}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReaderContent(viewer, fileId, title, isMockExam = false, showHomeworkBtn = false, isStrictMockExam = false, isDirectPdf = false) {
+  const isFav = isFavorite(fileId);
+  const isDark = document.body.classList.contains("dark-mode");
+  
+  // Chỉ bật 2 chế độ xem đối với Thư Viện và Tài Liệu (không thuộc Khóa Học/Khảo Thí)
+  const isLibraryOrDoc = !showHomeworkBtn && !isMockExam && !isStrictMockExam;
+  
+  window.currentReaderFileId = fileId;
+  window.currentReaderTitle = title;
+  window.currentReaderIsMockExam = isMockExam;
+  window.currentReaderShowHomeworkBtn = showHomeworkBtn;
+  window.currentReaderIsStrictMockExam = isStrictMockExam;
+  window.currentReaderIsDirectPdf = isDirectPdf;
+  window.currentReaderIsLibraryOrDoc = isLibraryOrDoc;
+
+  if (isStrictMockExam) {
+    isDirectPdf = true;
+  }
+  
+  // Toggle logo góc trên bên phải: Ẩn khi dùng tính năng Render PDF, hiện khi dùng cơ chế preview
+  const overlayLogo = document.querySelector('.overlay-logo');
+  if (overlayLogo) {
+    if (isDirectPdf) {
+      overlayLogo.style.display = 'none';
+    } else {
+      overlayLogo.style.display = '';
+    }
+  }
+  
+  let subStatusText = "";
+  if (isMockExam && typeof userSubmittedExams !== 'undefined') {
+    const userSub = userSubmittedExams.find(sub => sub.examTitle.trim().toLowerCase() === title.trim().toLowerCase());
+    if (userSub) {
+      if (userSub.score !== "") {
+        subStatusText = `<span class="reader-exam-badge graded">✅ Đã chấm</span>`;
+      } else {
+        subStatusText = `<span class="reader-exam-badge submitted">✅ Đã nộp (${userSub.timestamp})</span>`;
+      }
+    }
+  }
+
+  viewer.innerHTML = `
+    <div class="reader-container">
+      <div class="reader-header">
+        <div class="reader-title" title="${title}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span>${title}</span>
+          ${subStatusText}
+        </div>
+        <div class="reader-actions" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          ${(isLibraryOrDoc && !isStrictMockExam) ? `
+            <div class="reader-mode-toggle" style="display: inline-flex; align-items: center; background: ${isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(241, 245, 249, 0.85)'}; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; border-radius: 20px; padding: 3px; margin-right: 4px; gap: 2px;">
+              <button class="reader-mode-btn ${!isDirectPdf ? 'active' : ''}" 
+                      onclick="switchReaderViewMode(false)" 
+                      title="Trình xem mặc định: Xem nhanh, ổn định mọi file (không có thanh ghi chú)"
+                      style="padding: 4px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 16px; border: none; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 4px; ${!isDirectPdf ? (isDark ? 'background: #2563eb; color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);' : 'background: #2563eb; color: #ffffff; box-shadow: 0 1px 2px rgba(37,99,235,0.2);') : (isDark ? 'background: transparent; color: #94a3b8;' : 'background: transparent; color: #64748b;')}">
+                <span>👁️</span> <span>Mặc định</span>
+              </button>
+              <button class="reader-mode-btn ${isDirectPdf ? 'active' : ''}" 
+                      onclick="switchReaderViewMode(true)" 
+                      title="Render PDF: Tải PDF đầy đủ để vẽ và ghi chú trực tiếp"
+                      style="padding: 4px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 16px; border: none; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 4px; ${isDirectPdf ? (isDark ? 'background: #2563eb; color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);' : 'background: #2563eb; color: #ffffff; box-shadow: 0 1px 2px rgba(37,99,235,0.2);') : (isDark ? 'background: transparent; color: #94a3b8;' : 'background: transparent; color: #64748b;')}">
+                <span>✏️</span> <span>Ghi chú PDF</span>
+              </button>
+            </div>
+          ` : ''}
+          ${isMockExam ? `<button class="reader-btn submit-btn" onclick="openExamSubmitPopup('${title.replace(/'/g, "\\'")}')">📤 Nộp bài</button><button class="reader-btn score-btn" onclick="openScoreModal('${title.replace(/'/g, "\\'")}')">📊 Tra điểm</button>` : ''}
+          ${(!isMockExam && showHomeworkBtn) ? `<button class="reader-btn" id="toggleHomeworkBtn" onclick="toggleHomeworkPanel('${fileId}', '${title.replace(/'/g, "\\'")}')" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">📚 BTVN</button>` : ''}
+          <button class="reader-btn" id="favBtn_${fileId}" 
+                  onclick="toggleFavorite(this.dataset.id, this.dataset.title, this)" 
+                  data-id="${fileId}" 
+                  data-title="${title.replace(/"/g, '&quot;')}">
+            ${isFav ? '⭐ Đã lưu' : '☆ Lưu'}
+          </button>
+          <button class="reader-btn" id="toggleQABtn" onclick="toggleQAPanel('${fileId}')">
+            💬 Hỏi đáp
+          </button>
+          <button class="reader-btn maximize-btn" onclick="toggleReaderFullscreen()">
+            ⛶ Toàn màn hình
+          </button>
+          <button class="reader-btn" onclick="exitReader()">
+            ✕ Đóng
+          </button>
+        </div>
+      </div>
+      <div class="reader-iframe-wrapper" id="readerContentWrapper" style="position: relative; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+        ${isDirectPdf ? `
+          <!-- Premium Loading Screen inside readerContentWrapper -->
+          <div id="mockExamLoadScreen" style="position: absolute; inset: 0; background: ${isDark ? '#090d16' : '#f8fafc'}; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; transition: all 0.5s ease-in-out;">
+            ${isStrictMockExam ? `
+            <div style="width: 100%; max-width: 480px; height: 500px; background: ${isDark ? '#131c2e' : '#ffffff'}; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,${isDark ? '0.4' : '0.08'}); border: 1px solid ${isDark ? '#1e293b' : '#e2e8f0'}; padding: 32px 32px 24px 32px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box;">
+              
+              <!-- Premium Animated Pulsing Icon -->
+              <div class="animate-pulse" style="position: relative; margin-bottom: 24px;">
+                <div style="position: absolute; inset: -8px; background: #3b82f6; border-radius: 50%; filter: blur(8px); opacity: 0.15;"></div>
+                <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #1d4ed8); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); z-index: 1;">
+                  <svg style="width: 32px; height: 32px; color: white;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Title & Subtitle -->
+              <h2 id="mockExamLoadTitle" style="font-size: 18px; font-weight: 700; margin-bottom: 8px; color: ${isDark ? '#f8fafc' : '#0f172a'}; text-align: center; letter-spacing: -0.025em; text-transform: uppercase;">
+                Chuẩn bị phòng thi thử
+              </h2>
+              <p id="mockExamLoadSubtitle" style="font-size: 13px; color: ${isDark ? '#94a3b8' : '#64748b'}; text-align: center; margin-bottom: 24px; line-height: 1.5; height: 38px; overflow: hidden;">
+                Hệ thống đang thiết lập môi trường thi thử nghiêm ngặt, công cụ tương tác vẽ và đồng bộ đề thi.
+              </p>
+
+              <!-- Dynamic Checklist Steps (Fixed Height) -->
+              <div style="width: 100%; height: 110px; background: transparent; display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; box-sizing: border-box;">
+                <div id="mockStep1" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #10b981;">
+                  <span class="step-icon" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: bold; font-size: 11px;">✓</span>
+                  <span id="mockStep1Text">Khởi tạo phòng thi giám sát nâng cao</span>
+                </div>
+                <div id="mockStep2" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: ${isDark ? '#94a3b8' : '#64748b'}; transition: color 0.3s;">
+                  <span class="step-icon" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: ${isDark ? '#1e293b' : '#e2e8f0'}; color: ${isDark ? '#64748b' : '#94a3b8'}; transition: all 0.3s; font-weight: bold; font-size: 11px;">••</span>
+                  <span id="mockStep2Text">Tải tệp đề thi từ máy chủ</span>
+                </div>
+                <div id="mockStep3" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: ${isDark ? '#94a3b8' : '#64748b'}; transition: color 0.3s;">
+                  <span class="step-icon" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: ${isDark ? '#1e293b' : '#e2e8f0'}; color: ${isDark ? '#64748b' : '#94a3b8'}; transition: all 0.3s; font-weight: bold; font-size: 11px;">••</span>
+                  <span id="mockStep3Text">Giải mã tệp và xác thực tài liệu</span>
+                </div>
+                <div id="mockStep4" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: ${isDark ? '#94a3b8' : '#64748b'}; transition: color 0.3s;">
+                  <span class="step-icon" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: ${isDark ? '#1e293b' : '#e2e8f0'}; color: ${isDark ? '#64748b' : '#94a3b8'}; transition: all 0.3s; font-weight: bold; font-size: 11px;">••</span>
+                  <span id="mockStep4Text">Khởi tạo công cụ tương tác (Bút, Tẩy, Highlight)</span>
+                </div>
+              </div>
+
+              <!-- Fixed Space Bottom Area -->
+              <div style="width: 100%; margin-top: auto; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 100%; height: 6px; background: ${isDark ? '#1e293b' : '#e2e8f0'}; border-radius: 100px; overflow: hidden; margin-bottom: 12px;">
+                  <div id="mockExamProgressBar" style="width: 5%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); border-radius: 100px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);"></div>
+                </div>
+                
+                <div style="height: 18px; display: flex; align-items: center; justify-content: center;">
+                  <p id="mockExamProgressText" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, sans-serif; font-size: 12px; color: ${isDark ? '#10b981' : '#059669'}; font-weight: 600; margin: 0; text-align: center;">Đang khởi động...</p>
+                </div>
+                
+                <!-- Ready Button Container: fixed height prevents shift when button injected -->
+                <div style="width: 100%; height: 60px; margin-top: 4px; display: flex; justify-content: center; align-items: center;">
+                  <div id="mockExamReadyBtnContainer" style="width: 100%; display: flex; justify-content: center; align-items: center;"></div>
+                </div>
+              </div>
+            </div>
+            ` : `
+            <!-- Minimal Loading Screen for Regular PDFs -->
+            <div style="width: 100%; max-width: 440px; min-height: 320px; background: ${isDark ? '#131c2e' : '#ffffff'}; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,${isDark ? '0.2' : '0.05'}); border: 1px solid ${isDark ? '#1e293b' : '#e2e8f0'}; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; text-align: center;">
+              <style>
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+                .word-note-editor:empty:before {
+                  content: attr(data-placeholder);
+                  color: #94a3b8;
+                  pointer-events: none;
+                  display: block;
+                  font-style: italic;
+                }
+              </style>
+              <div style="width: 44px; height: 44px; border: 3px solid ${isDark ? '#1e293b' : '#e2e8f0'}; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+              
+              <h2 id="mockExamLoadTitle" style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: ${isDark ? '#f8fafc' : '#0f172a'}; text-align: center; letter-spacing: -0.01em;">
+                Đang nạp và render PDF...
+              </h2>
+              
+              <div style="width: 100%; max-width: 280px; background: ${isDark ? '#1e293b' : '#e2e8f0'}; border-radius: 100px; height: 5px; overflow: hidden; margin-bottom: 12px;">
+                <div id="mockExamProgressBar" style="width: 5%; height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 100px; transition: width 0.4s ease-out;"></div>
+              </div>
+              
+              <div style="height: 18px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                <p id="mockExamProgressText" style="font-size: 12px; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-align: center; margin: 0;">Đang kết nối...</p>
+              </div>
+
+              <!-- Notice & Switch Button for Heavy Files (Only in Library & Documents) -->
+              ${isLibraryOrDoc ? `
+              <div style="margin-top: 8px; padding: 12px 16px; border-radius: 12px; background: ${isDark ? 'rgba(234, 179, 8, 0.1)' : 'rgba(254, 240, 138, 0.45)'}; border: 1px solid ${isDark ? 'rgba(234, 179, 8, 0.3)' : '#fde047'}; font-size: 0.78rem; color: ${isDark ? '#fef08a' : '#854d0e'}; line-height: 1.45; display: flex; flex-direction: column; gap: 8px; align-items: center;">
+                <div style="display: flex; align-items: flex-start; gap: 6px; text-align: left;">
+                  <span style="font-size: 0.95rem; line-height: 1;">⚠️</span>
+                  <span><strong>Nhắc nhở:</strong> Một số tệp quá nặng có thể không thể render PDF hoặc mất thời gian. Nếu tải quá lâu, bạn hãy thử chuyển sang <strong>Trình xem mặc định</strong>.</span>
+                </div>
+                <button onclick="switchReaderViewMode(false)"
+                        style="padding: 6px 14px; font-size: 0.78rem; font-weight: 700; background: ${isDark ? '#2563eb' : '#1d4ed8'}; color: white; border: none; border-radius: 8px; cursor: pointer; transition: all 0.15s; margin-top: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.15);"
+                        onmouseover="this.style.opacity='0.9'; this.style.transform='scale(1.02)'" onmouseout="this.style.opacity='1'; this.style.transform='scale(1)'">
+                  🔄 Chuyển sang Trình xem mặc định
+                </button>
+              </div>
+              ` : ''}
+
+              <!-- Button container hidden for normal PDF -->
+              <div id="mockExamReadyBtnContainer" style="display: none;"></div>
+            </div>
+            `}
+          </div>
+
+          <div id="strictMockExamToolbar" style="display: none; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); z-index: 95; flex-direction: column; gap: 10px; padding: 12px; background: ${isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)'}; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15); backdrop-filter: blur(12px); align-items: center; width: 64px; transition: all 0.3s ease-in-out;">
+            <!-- Zoom In -->
+            <button id="btnToolZoomIn" onclick="window.zoomStrictMockExam(0.1)" title="Phóng to (Zoom In)" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; color: ${isDark ? '#f8fafc' : '#475569'}; transition: all 0.2s; cursor: pointer; outline: none;" onmouseover="this.style.transform='scale(1.08)'; this.style.background='${isDark ? '#334155' : '#f1f5f9'}'" onmouseout="this.style.transform='scale(1)'">
+              ➕
+            </button>
+            
+            <!-- Zoom Out -->
+            <button id="btnToolZoomOut" onclick="window.zoomStrictMockExam(-0.1)" title="Thu nhỏ (Zoom Out)" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; color: ${isDark ? '#f8fafc' : '#475569'}; transition: all 0.2s; cursor: pointer; outline: none;" onmouseover="this.style.transform='scale(1.08)'; this.style.background='${isDark ? '#334155' : '#f1f5f9'}'" onmouseout="this.style.transform='scale(1)'">
+              ➖
+            </button>
+            
+            <div style="width: 24px; height: 1px; background: ${isDark ? '#334155' : '#cbd5e1'}; margin: 4px 0;"></div>
+            
+            <!-- Scroll -->
+            <button id="btnToolScroll" onclick="window.drawingMode='scroll'; updateCanvasCursor(); window.updateMockExamToolbarUI();" title="Chế độ cuộn trang" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              👆
+            </button>
+            
+            <!-- Pen -->
+            <button id="btnToolPen" onclick="window.drawingMode='draw'; window.drawingColor='#3b82f6'; updateCanvasCursor(); window.updateMockExamToolbarUI();" title="Bút viết vẽ xanh" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              ✏️
+            </button>
+            
+            <!-- Highlight -->
+            <button id="btnToolHighlight" onclick="window.drawingMode='draw'; window.drawingColor='rgba(250, 204, 21, 0.4)'; updateCanvasCursor(); window.updateMockExamToolbarUI();" title="Bút nhớ dạ quang" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              🖍️
+            </button>
+            
+            <!-- Eraser -->
+            <button id="btnToolEraser" onclick="window.drawingMode='erase'; updateCanvasCursor(); window.updateMockExamToolbarUI();" title="Cục tẩy xóa nét vẽ" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              🧽
+            </button>
+
+            <!-- Text Note Tool (Foxit Style) -->
+            <button id="btnToolText" onclick="window.drawingMode='text'; updateCanvasCursor(); window.updateMockExamToolbarUI();" title="Gõ văn bản trực tiếp lên PDF (Text Tool - T)" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 800; font-family: 'Inter', system-ui, sans-serif; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              T
+            </button>
+
+            ${(showHomeworkBtn || isMockExam || isStrictMockExam) ? `
+            <!-- Add Note Page (Chỉ thêm vào Khóa Học & Khảo Thí) -->
+            <button id="btnToolAddNotePage" onclick="window.addLinedNotePage('word')" title="Thêm trang giấy Note văn bản (Word)" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+              📝
+            </button>
+            ` : ''}
+
+            <!-- Clear All Notes -->
+            <button id="btnToolClear" onclick="window.clearCurrentPdfNotes()" title="Xóa tất cả ghi chú" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; background: ${isDark ? '#1e293b' : '#ffffff'}; transition: all 0.2s; cursor: pointer; outline: none;">
+              🗑️
+            </button>
+
+            <div style="width: 24px; height: 1px; background: ${isDark ? '#334155' : '#cbd5e1'}; margin: 2px 0;"></div>
+
+            <!-- Compact Save Status Badge -->
+            <div id="pdfNotesSaveStatus" style="width: 40px; border-radius: 10px; padding: 4px 0; font-size: 8px; font-weight: 700; color: ${isDark ? '#94a3b8' : '#64748b'}; text-align: center; line-height: 1.1; background: ${isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(248, 250, 252, 0.9)'}; border: 1px solid ${isDark ? '#334155' : '#cbd5e1'}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);" title="Trạng thái tự động đồng bộ (Local & Cloud)">
+              <span id="pdfSaveIcon" style="font-size: 13px;">☁️</span>
+              <span id="pdfSaveText" style="font-size: 8px; font-weight: 700; color: #10b981; letter-spacing: -0.2px;">Đã lưu</span>
+            </div>
+          </div>
+          <div id="strictMockExamContainer" style="width: 100%; height: 100%; overflow-y: auto; background: ${isDark ? '#020617' : '#e2e8f0'}; display: flex; flex-direction: column; align-items: center; padding: 20px 0; overflow-x: auto;">
+             <div id="strictMockExamInner" style="transform-origin: top center; transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; width: 100%;">
+                 <!-- PDF Canvas elements go here -->
+             </div>
+          </div>
+        ` : `
+          <iframe id="readerIframe" src="https://drive.google.com/file/d/${fileId}/preview" allow="autoplay" style="width:100%; height:100%; border:none;"></iframe>
+        `}
+      </div>
+
+      <!-- Q&A Panel -->
+      <div id="qaPanel" class="qa-side-panel">
+        <div class="qa-header">
+          <h3>💬 Hỏi đáp bài giảng</h3>
+          <button class="qa-close-btn" onclick="toggleQAPanel()">✕</button>
+        </div>
+        <div id="qaList" class="qa-comments-list">
+          <!-- Comments will be rendered here -->
+          <div class="qa-loading">Đang tải bình luận...</div>
+        </div>
+        <div class="qa-input-area">
+          <textarea id="qaInput" placeholder="Nhập câu hỏi hoặc bình luận của bạn..."></textarea>
+          <div class="qa-input-footer">
+            <button id="sendQABtn" onclick="sendNewQA('${fileId}')">Gửi</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Homework Panel -->
+      <div id="homeworkPanel" class="qa-side-panel">
+        <div class="qa-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.15rem;">📚</span>
+            <h3 style="margin: 0; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.5px;">BÀI TẬP VỀ NHÀ</h3>
+          </div>
+          <button class="qa-close-btn" onclick="toggleHomeworkPanel()">✕</button>
+        </div>
+        <div id="homeworkContent" style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px;">
+          <!-- Homework content/form loaded dynamically -->
+          <div style="text-align: center; padding: 30px;"><div class="spinner" style="margin: 0 auto;"></div><div style="margin-top: 10px; color: #64748b; font-size: 0.85rem;">Đang tải thông tin BTVN...</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 🛑 [INSTANT REVOCATION] Thu hồi quyền Drive ngay sau khi hiển thị preview
+  let revoked = false;
+  const doRevoke = () => {
+    if (revoked) return;
+    revoked = true;
+    const email = currentEmail || sessionStorage.getItem("userEmail") || "";
+    if (fileId && fileId !== "0000000000" && email) {
+      console.log("🔒 [Instant Revoke] Gọi thu hồi quyền Drive ngay sau khi hiện preview:", fileId, "user:", email);
+      if (window.google && window.google.script && window.google.script.run && typeof window.google.script.run.revokeFileAccess === "function") {
+        window.google.script.run
+          .withSuccessHandler(function() {
+            console.log("✅ [Instant Revoke] Đã thu hồi quyền Drive thành công cho file: " + fileId);
+          })
+          .withFailureHandler(function(err) {
+            console.warn("⚠️ [Instant Revoke Warning] " + (err ? err.message : err));
+          })
+          .revokeFileAccess(fileId, email);
+      }
+    }
+    if (typeof revokeAccess === 'function') revokeAccess();
+  };
+
+  if (!isDirectPdf) {
+    document.body.classList.add('video-active');
+    initVideoQrOverlay(fileId, title);
+
+    if (typeof showToast === 'function') {
+      showToast("Nếu tệp báo thiếu quyền xem, bạn chỉ cần bấm lại nút 'Xem' lần nữa là được nhé.", "info", 6000, {
+        text: "Cách Khắc Phục",
+        onclick: "openCourseAccessHelpModal()"
+      });
+    }
+
+    // 🎯 Lắng nghe sự kiện load của iframe: Khi iframe tải xong mới thu hồi quyền lập tức
+    const iframe = document.getElementById('readerIframe');
+    if (iframe) {
+      iframe.addEventListener('load', doRevoke, { once: true });
+      // Fallback: nếu mạng chậm hoặc sự kiện load không nổ sau 3 giây thì tự động revoke để đảm bảo bảo mật
+      setTimeout(doRevoke, 3000);
+    } else {
+      doRevoke();
+    }
+
+    // 📺 Hiển thị popup hỏi bật toàn màn hình web khi frame video xuất hiện
+    showVideoFullscreenPrompt();
+  } else {
+    document.body.classList.remove('video-active');
+    removeVideoQrOverlay();
+    dismissVideoFullscreenPrompt();
+  }
+  
+  if (isDirectPdf) {
+      if (window.loadStrictMockExamPdf) {
+          window.loadStrictMockExamPdf(fileId, isStrictMockExam);
+      }
+  }
+}
+
+let videoFullscreenPromptTimer = null;
+
+function showVideoFullscreenPrompt() {
+  dismissVideoFullscreenPrompt();
+
+  // Nếu giao diện đã ở chế độ toàn màn hình web (đã ẩn các khung) thì không cần hỏi
+  if (document.body.classList.contains('reader-fullscreen')) return;
+
+  const wrapper = document.getElementById('readerContentWrapper');
+  if (!wrapper) return;
+
+  const promptDiv = document.createElement('div');
+  promptDiv.id = 'videoFullscreenPrompt';
+  promptDiv.className = 'video-fullscreen-prompt';
+  promptDiv.innerHTML = `
+    <div class="video-fs-header">
+      <div class="video-fs-header-left">
+        <div class="video-fs-icon-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </div>
+        <span class="video-fs-title">Toàn màn hình web?</span>
+      </div>
+      <button class="video-fs-close" onclick="dismissVideoFullscreenPrompt()" title="Đóng">✕</button>
+    </div>
+    <div class="video-fs-desc">Ẩn các khung của web để xem video rộng và tập trung hơn?</div>
+    <div class="video-fs-actions">
+      <button id="videoFsYesBtn" class="video-fs-btn primary" onclick="acceptVideoFullscreen()">
+        <span>⛶ Bật ngay</span>
+      </button>
+      <button id="videoFsNoBtn" class="video-fs-btn secondary" onclick="dismissVideoFullscreenPrompt()">
+        <span>Để sau</span>
+      </button>
+    </div>
+  `;
+
+  wrapper.appendChild(promptDiv);
+
+  // Tự động ẩn nhẹ nhàng sau 10 giây nếu người dùng không tương tác
+  if (videoFullscreenPromptTimer) clearTimeout(videoFullscreenPromptTimer);
+  videoFullscreenPromptTimer = setTimeout(() => {
+    dismissVideoFullscreenPrompt();
+  }, 10000);
+}
+
+function dismissVideoFullscreenPrompt() {
+  if (videoFullscreenPromptTimer) {
+    clearTimeout(videoFullscreenPromptTimer);
+    videoFullscreenPromptTimer = null;
+  }
+  const prompt = document.getElementById('videoFullscreenPrompt');
+  if (prompt) {
+    prompt.classList.add('hide');
+    setTimeout(() => {
+      if (prompt && prompt.parentNode) {
+        prompt.parentNode.removeChild(prompt);
+      }
+    }, 300);
+  }
+}
+
+function acceptVideoFullscreen() {
+  dismissVideoFullscreenPrompt();
+  
+  // Kích hoạt chế độ toàn màn hình của web (ẩn sidebar & left-panel)
+  if (!document.body.classList.contains('reader-fullscreen')) {
+    document.body.classList.add('reader-fullscreen');
+    const btn = document.querySelector('.maximize-btn');
+    if (btn) {
+      btn.innerHTML = '🤏 Thu nhỏ';
+    }
+  }
+}
+
+window.showVideoFullscreenPrompt = showVideoFullscreenPrompt;
+window.dismissVideoFullscreenPrompt = dismissVideoFullscreenPrompt;
+window.acceptVideoFullscreen = acceptVideoFullscreen;
+
+function switchReaderViewMode(isDirectPdf) {
+  const viewer = document.getElementById('bookViewer');
+  if (!viewer) return;
+  renderReaderContent(
+    viewer,
+    window.currentReaderFileId,
+    window.currentReaderTitle,
+    window.currentReaderIsMockExam || false,
+    window.currentReaderShowHomeworkBtn || false,
+    window.currentReaderIsStrictMockExam || false,
+    !!isDirectPdf
+  );
+}
+
+function toggleReaderFullscreen() {
+  document.body.classList.toggle('reader-fullscreen');
+  const btn = document.querySelector('.maximize-btn');
+  if (btn) {
+    const isFull = document.body.classList.contains('reader-fullscreen');
+    btn.innerHTML = isFull ? '🤏 Thu nhỏ' : '⛶ Toàn màn hình';
+  }
+}
+
+function exitReader() {
+  window.currentIsStrictMockExam = false;
+  document.body.classList.remove('video-active');
+  removeVideoQrOverlay();
+  dismissVideoFullscreenPrompt();
+  if (typeof window.resetGlobalDocumentLoading === 'function') {
+    window.resetGlobalDocumentLoading();
+  } else {
+    window.isGlobalDocumentLoading = false;
+  }
+  if (typeof isLoading !== 'undefined') isLoading = false;
+  document.body.classList.remove('reader-fullscreen');
+  const panel = document.getElementById("qaPanel");
+  if (panel) panel.classList.remove("active");
+  
+  if (typeof mockExamState !== 'undefined' && mockExamState.active) {
+    if (typeof exitMockExamMode === 'function') {
+      exitMockExamMode(true);
+      return; // exitMockExamMode will call exitReader again after resetting state
+    }
+  }
+  
+  // Dừng timer khi đóng tài liệu
+  if (typeof stopStudyTimer === 'function') stopStudyTimer();
+
+  // Khôi phục hiển thị logo góc trên bên phải khi đóng tài liệu
+  window.currentReaderIsDirectPdf = false;
+  const overlayLogo = document.querySelector('.overlay-logo');
+  if (overlayLogo) {
+    const viewToCheck = (typeof currentView !== 'undefined' && currentView) ? currentView : (window.lastKnownView || 'books');
+    if (['books', 'exams', 'courses', 'mockExams'].includes(viewToCheck)) {
+      overlayLogo.style.display = '';
+    }
+  }
+
+  // Thu hồi quyền truy cập (revoke) ngay lập tức
+  if (typeof revokeAccess === 'function') revokeAccess();
+
+  const viewer = document.getElementById('bookViewer');
+  
+  let defaultHtml = `
+    <div class="tds-central-state">
+      <div class="tds-state-icon" style="opacity: 0.5;">📚</div>
+      <div class="tds-state-title">Thư Viện Sách</div>
+      <div class="tds-state-message">Chọn một tài liệu để bắt đầu đọc<br>Nội dung sẽ hiển thị tại đây 🌱</div>
+    </div>
+  `;
+  
+  const viewToCheck = (typeof currentView !== 'undefined' && currentView) ? currentView : (window.lastKnownView || 'books');
+  
+  if (viewToCheck === 'exams') {
+    defaultHtml = `
+      <div class="tds-central-state">
+        <div class="tds-state-icon" style="opacity: 0.5;">📝</div>
+        <div class="tds-state-title">Kho Tài Liệu</div>
+        <div class="tds-state-message">Hãy lựa chọn một tài liệu để bắt đầu ôn tập ngay thôi 🌱</div>
+      </div>
+    `;
+  } else if (viewToCheck === 'courses') {
+    defaultHtml = `
+      <div class="tds-central-state" style="width: 100%; height: 100%; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; box-sizing: border-box; overflow-y: auto;">
+        <div class="course-welcome-card">
+          <div class="course-welcome-icon-box">🎥</div>
+          <div class="course-welcome-title-group">
+            <div class="course-welcome-title">Khóa Học Video & Record</div>
+            <div class="course-welcome-subtitle">Vui lòng chọn bài học ở danh sách bên trái để bắt đầu xem 🌱</div>
+          </div>
+
+          <div class="course-notice-box">
+            <div class="course-notice-header">
+              <div class="course-notice-header-left">
+                <span>📢 Thông báo Video Record</span>
+              </div>
+              <span class="course-notice-badge">✨ Tự động cập nhật</span>
+            </div>
+
+            <div class="course-notice-list">
+              <div class="course-notice-item">
+                <div class="course-notice-icon">⚡</div>
+                <div class="course-notice-text">
+                  <b>Tự động tải lên:</b> Video record sẽ <b>tự động được đưa lên website</b> ngay khi hoàn tất cập nhật và hệ thống sẽ tự động gửi <b>thông báo vào hòm thư</b> của bạn.
+                </div>
+              </div>
+
+              <div class="course-notice-item">
+                <div class="course-notice-icon warning">💡</div>
+                <div class="course-notice-text">
+                  <b>Xử lý lỗi "Bạn không có quyền xem":</b> Chỉ cần ấn nút <b>"Xem"</b> lại một lần nữa là được ngay nhé! Đồng thời hãy <b>tắt bớt các tab ngốn mạng</b> để dồn băng thông giúp video load mượt mà hơn nha ✨
+                </div>
+              </div>
+
+              <div class="course-notice-item">
+                <div class="course-notice-icon warning">⏳</div>
+                <div class="course-notice-text">
+                  <b>Đang xử lý:</b> Nếu chưa có nghĩa là video record của buổi đó đang được xử lý. Vui lòng <b>hạn chế thúc giục các Admin</b> nhé, vì việc thúc giục cũng không thể làm tăng tốc độ xử lý video được đâu ạ ☺️
+                </div>
+              </div>
+
+              <div class="course-notice-item">
+                <div class="course-notice-icon success">💙</div>
+                <div class="course-notice-text">
+                  <b>Đồng hành cùng bạn:</b> Chân thành cảm ơn sự thông cảm và hỗ trợ của bạn! Chúc bạn có những buổi học thật hiệu quả!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (viewToCheck === 'mockExams') {
+    defaultHtml = `
+      <div class="tds-central-state">
+        <div class="tds-state-icon" style="opacity: 0.5;">✍️</div>
+        <div class="tds-state-title">Hệ Thống Khảo Thí</div>
+        <div class="tds-state-message">Chọn đề thi để bắt đầu làm bài. Hệ thống sẽ bật chế độ giám sát.</div>
+      </div>
+    `;
+  }
+
+  viewer.innerHTML = defaultHtml;
+}
+
+function requestOpenBook(fileId, title, isPaid, type = "book", folderName = "", btn) {
+  if (typeof window.resetGlobalDocumentLoading === 'function') {
+    window.resetGlobalDocumentLoading();
+  }
+  if (typeof isMockExamFile === 'function' && isMockExamFile(fileId, title, folderName, type)) {
+    showToast("⚠️ Đề thi thử bắt buộc phải truy cập qua phòng Khảo thí.");
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = 1;
+      btn.style.cursor = "pointer";
+    }
+    const p = switchView('mockExams');
+    if (p) p.then((success) => {
+      if (success !== false && currentView === 'mockExams') {
+        viewMockExam({ fileId: fileId, title: title, type: type || 'pdf' });
+      }
+    });
+    return;
+  }
+
+  // Chặn mở khóa học qua requestOpenBook (Lỗ hổng bypass screen share)
+  const isCourse = (typeof allCourses !== 'undefined' && allCourses.some(c => String(c.fileId).trim() === String(fileId).trim())) 
+                   || String(folderName).toLowerCase().includes("khóa học") 
+                   || type === "video"
+                   || type === "course";
+                   
+  if (isCourse) {
+    showToast("⚠️ Khóa học bắt buộc phải truy cập qua mục Khóa Học.");
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = 1;
+      btn.style.cursor = "pointer";
+    }
+    const p = switchView('courses');
+    if (p) p.then((success) => {
+      if (success !== false && currentView === 'courses') {
+        readCourse(fileId, title, "video", folderName);
+      }
+    });
+    return;
+  }
+
+  const email = sessionStorage.getItem("userEmail") || "";
+
+  // 1. Kiểm tra giới hạn hàng ngày đối với tài khoản STUDENT
+  const limitCheck = checkStudentDailyLimitClient(email, fileId, folderName);
+  if (!limitCheck.allowed) {
+    showErrorModal(limitCheck.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = 1;
+      btn.style.cursor = "pointer";
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = 0.5;
+    btn.style.cursor = "not-allowed";
+  }
+
+  if (isFilePurchased(fileId) && email) {
+    openPurchasedItemDirectly(email, fileId, title, type, folderName, btn);
+    return;
+  }
+
+  // 2. S-STUDENT hoặc ADMIN được mở trực tiếp, không hiển thị bất kỳ hộp thoại "hỏi tiền" nào
+  const userRole = (currentUserRole || "").toUpperCase().trim();
+  if ((userRole === "S-STUDENT" || userRole === "ADMIN") && email) {
+    const viewer = document.getElementById("bookViewer");
+    if (viewer) {
+      viewer.innerHTML = `
+        <div class="tds-central-state">
+          <div class="tds-spinner-wrapper">
+            <div class="spinner"></div>
+            <div class="tds-state-message bold">
+              📖 Đợi một chút, đang mở ${type === "exam" ? "tài liệu" : "sách"} cho bạn...
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    openItemWithPoints(email, fileId, title, type, folderName, btn);
+    return;
+  }
+
+  const modal = document.getElementById("confirmAccessModal");
+  const message = document.getElementById("confirmAccessMessage");
+  const yesBtn = document.getElementById("confirmAccessYes");
+  const noBtn = document.getElementById("confirmAccessNo");
+
+  message.textContent = `📘 Bạn có muốn dùng 67 🪙 để thuê (5 ngày) ${type === "exam" ? "tài liệu" : "sách"} "${title}" hay không?`;
+  modal.style.display = "flex";
+
+  const newYesBtn = yesBtn.cloneNode(true);
+  yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+
+  const newNoBtn = noBtn.cloneNode(true);
+  noBtn.parentNode.replaceChild(newNoBtn, noBtn);
+
+  newYesBtn.onclick = function () {
+    closeConfirmAccess();
+
+    if (typeof window.resetGlobalDocumentLoading === 'function') {
+      window.resetGlobalDocumentLoading();
+    }
+    isConnectingFile = true;
+    window.setGlobalDocumentLoading(true, 8000);
+
+    const viewer = document.getElementById("bookViewer");
+    viewer.innerHTML = `
+      <div class="tds-central-state">
+        <div class="tds-spinner-wrapper">
+          <div class="spinner"></div>
+          <div class="tds-state-message bold">
+            📖 Đợi một chút, đang mở ${type === "exam" ? "tài liệu" : "sách"} cho bạn...
+          </div>
+        </div>
+      </div>
+    `;
+
+    const email = sessionStorage.getItem("userEmail");
+    if (!email) {
+      window.resetGlobalDocumentLoading();
+      // Nếu không có email, bật lại nút
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = "";
+        btn.style.cursor = "";
+        btn.style.pointerEvents = "";
+      }
+      return;
+    }
+
+    if (isPaid) {
+      google.script.run
+        .withSuccessHandler(function (role) {
+          const userRole = (role || "").toUpperCase();
+          let hasAccess = false;
+
+          if (userRole === "ADMIN") {
+            hasAccess = true;
+          } else if (type === "exam") {
+            const folderLower = folderName.toLowerCase();
+            if (folderLower.includes("student")) {
+              hasAccess = userRole === "STUDENT" || userRole === "S-STUDENT";
+            } else if (folderLower.includes("vip")) {
+              hasAccess = ["VIP", "STUDENT", "S-STUDENT", "O-STUDENT"].includes(userRole);
+            } else {
+              hasAccess = true;
+            }
+          } else if (type === "book") {
+            const folderLower = folderName.toLowerCase();
+            if (folderLower.includes("vip")) {
+              hasAccess = ["VIP", "STUDENT", "S-STUDENT", "O-STUDENT"].includes(userRole);
+            } else if (folderLower.includes("mem")) {
+              hasAccess = ["MEM", "VIP", "O-STUDENT", "STUDENT", "S-STUDENT"].includes(userRole);
+            } else {
+              hasAccess = true;
+            }
+          }
+
+          if (!hasAccess) {
+            window.resetGlobalDocumentLoading();
+
+            let reason = "🔒 Bạn không có quyền truy cập tài liệu này.";
+
+            const isStudent = folderName.toLowerCase().includes("student");
+            const isVip = folderName.toLowerCase().includes("vip");
+            const isOStudent = folderName.toLowerCase().includes("o-student");
+
+            if (type === "exam") {
+              if (isOStudent) {
+                reason = `🔒 Đây là tài liệu chỉ dành cho <strong>O-STUDENT</strong>. Vui lòng đăng ký quyền để truy cập.`;
+              } else if (isStudent) {
+                reason = `🔒 Đây là tài liệu chỉ dành cho <strong>STUDENT</strong>. Vui lòng đăng ký khóa học để truy cập.`;
+              } else if (isVip) {
+                reason = `🔒 Đây là tài liệu <strong>VIP</strong>. Vui lòng nâng cấp tài khoản VIP để truy cập.`;
+              }
+            } else {
+              if (isOStudent) {
+                reason = `🔒 Đây là sách chỉ dành cho <strong>O-STUDENT</strong>. Vui lòng đăng ký quyền để truy cập.`;
+              } else if (isVip) {
+                reason = `🔒 Đây là sách <strong>VIP</strong>. Vui lòng nâng cấp tài khoản VIP để truy cập.`;
+              }
+            }
+
+            showVipModal(reason);
+            viewer.innerHTML = `
+              <div class="tds-central-state">
+                <div class="tds-state-icon">🛑</div>
+                <div class="tds-state-title">Truy Cập Bị Từ Chối</div>
+                <div class="tds-state-message">${reason}</div>
+              </div>
+            `;
+
+            // Bật lại nút vì không được mở
+            if (btn) {
+              btn.disabled = false;
+              btn.style.opacity = "";
+              btn.style.cursor = "";
+              btn.style.pointerEvents = "";
+            }
+            return;
+          }
+
+          // Có quyền → mở sách/tài liệu
+          openItemWithPoints(email, fileId, title, type, folderName, btn, true);
+        })
+        .withFailureHandler(function (err) {
+          window.resetGlobalDocumentLoading();
+          if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "";
+            btn.style.cursor = "";
+            btn.style.pointerEvents = "";
+          }
+          showErrorModal("Không thể kết nối phân quyền: " + err.message);
+        })
+        .getUserRole(email);
+    } else {
+      openItemWithPoints(email, fileId, title, type, folderName, btn, true);
+    }
+  };
+
+  newNoBtn.onclick = function () {
+    closeConfirmAccess();
+
+    // Nếu người dùng từ chối, bật lại nút
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = 1;
+      btn.style.cursor = "pointer";
+    }
+  };
+}
+
+// Mảng lưu danh sách fileId đã mở
+
+function openItemWithPoints(email, fileId, title, type = "book", folderName = "", btn) {
+  if (typeof window.resetGlobalDocumentLoading === 'function') {
+    window.resetGlobalDocumentLoading();
+  }
+  isConnectingFile = true;
+  window.setGlobalDocumentLoading(true, 8000);
+
+  let optimisticallyDeducted = false;
+  let originalPoints = currentUserPoints;
+  const userRole = (window.currentUserRole || "").toUpperCase().trim();
+  
+  if (userRole !== "S-STUDENT" && userRole !== "ADMIN") {
+      if (typeof currentUserPoints !== 'undefined' && currentUserPoints >= 67 && typeof updatePointDisplay === 'function') {
+          updatePointDisplay(currentUserPoints - 67);
+          optimisticallyDeducted = true;
+      }
+  }
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      if (!res || res.error) {
+        if (optimisticallyDeducted) updatePointDisplay(originalPoints);
+        window.resetGlobalDocumentLoading();
+        showErrorModal(res ? res.message : `Đã xảy ra lỗi khi giao dịch.`);
+        triggerStudentReliefIfEligible();
+        const viewer = document.getElementById("bookViewer");
+        if (viewer) {
+          viewer.innerHTML = `
+            <div class="tds-central-state">
+              <div class="tds-state-icon">🪙</div>
+              <div class="tds-state-title">Thất bại</div>
+              <div class="tds-state-message">${res ? res.message : "Không đủ 🪙."}</div>
+            </div>
+          `;
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.style.opacity = "";
+          btn.style.cursor = "";
+          btn.style.pointerEvents = "";
+        }
+        return;
+      }
+
+      isConnectingFile = false;
+      const pointDisplay = document.getElementById("userPoint");
+      updatePointDisplay(res.points);
+      
+      if (!res.freeAccess) {
+         showPointDeductionNotice();
+         // Lưu vào danh sách đang thuê (Local Storage)
+         addPurchasedFile(fileId, title, type, folderName);
+         // Ghi nhận giới hạn hàng ngày nếu là tài khoản STUDENT
+         logStudentDailyPurchaseClient(email, fileId, folderName);
+      } else {
+         // Nếu miễn phí thì thông báo nhỏ theo phân quyền cụ thể
+         const userRole = (currentUserRole || "").toUpperCase().trim();
+         if (userRole === "S-STUDENT") {
+            showToast("✅ Đã mở tài liệu bằng quyền S-STUDENT", "success");
+         } else if (userRole === "ADMIN") {
+            showToast("✅ Đã mở tài liệu bằng quyền ADMIN", "success");
+         } else {
+            showToast("✅ Đã mở tài liệu bằng quyền ưu tiên", "success");
+         }
+      }
+
+      // The server already shared the file directly inside `deductPointsAndLog`.
+      // We just render it.
+
+      // Lưu email hiện tại để revoke
+      currentEmail = email;
+
+      // Lưu vào danh sách đang mở
+      if (!openedFileIds.includes(fileId)) {
+        openedFileIds.push(fileId);
+      }
+
+      // Lưu vào danh sách gần đây (localStorage)
+      addRecentFile({
+        fileId: fileId,
+        title: title,
+        type: type,
+        category: type,
+        folder: folderName,
+        timestamp: new Date().getTime()
+      });
+      renderRecentFiles();
+      
+      // Theo dõi tiến độ học tập
+      if(typeof trackLearning === 'function') {
+        trackLearning(folderName, fileId);
+      }
+      if (typeof startStudyTimer === 'function') {
+        startStudyTimer();
+      }
+
+      // Mở sách/tài liệu (đã được chia sẻ trước đó trong deductPointsAndLog)
+      if (type === "exam") {
+        readExam(fileId, title, true);
+      } else {
+        readBook(fileId, title, true);
+      }
+    })
+    .withFailureHandler(function (err) {
+      if (optimisticallyDeducted) updatePointDisplay(originalPoints);
+      window.resetGlobalDocumentLoading();
+      showErrorModal("Lỗi kết nối khi trừ điểm: " + err.message);
+    })
+    .deductPointsAndLog(type, fileId, title);
+}
+
+function filterBooks() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = allBooks.filter(b => b.title.toLowerCase().includes(query));
+  displayBooks(filtered);
+}
+
+  
+
+function readExam(fileId, title, alreadyShared = false) {
+  if (isMobileOrTablet()) hideLeftPanel();
+
+  currentEmail = sessionStorage.getItem("userEmail") || "";
+
+  const viewer = document.getElementById('bookViewer');
+  if (fileId && !openedFileIds.includes(fileId)) {
+    openedFileIds.push(fileId);
+  }
+
+  if (alreadyShared) {
+    renderReaderContent(viewer, fileId, title, false, false, false, false);
+    if (typeof window.resetGlobalDocumentLoading === 'function') {
+      window.resetGlobalDocumentLoading();
+    }
+  } else {
+    renderReaderLoading(viewer, `📝 Đang cấp quyền và nạp đề thi "${title}"...`);
+    window.setGlobalDocumentLoading(true, 8000);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (fileId && !openedFileIds.includes(fileId)) {
+          openedFileIds.push(fileId);
+        }
+        renderReaderContent(viewer, fileId, title, false, false, false, false);
+        if (typeof window.resetGlobalDocumentLoading === 'function') {
+          window.resetGlobalDocumentLoading();
+        }
+      })
+      .withFailureHandler(function (err) {
+        console.error("Lỗi chia sẻ file đề thi:", err);
+        renderReaderContent(viewer, fileId, title, false, false, false, false);
+        if (typeof window.resetGlobalDocumentLoading === 'function') {
+          window.resetGlobalDocumentLoading();
+        }
+      })
+      .sharePurchasedFile(fileId, currentEmail);
+  }
+}
+
+function updatePanelTriggerInfo(mode) {
+  const iconElem = document.getElementById('showPanelIcon');
+  const tooltipElem = document.getElementById('showPanelTooltip');
+  const btnElem = document.getElementById('showPanelBtn');
+  if (!btnElem) return;
+
+  const modeConfig = {
+    books: { icon: '📚', label: 'Thư viện Sách', title: 'Mở lại danh sách Sách' },
+    exams: { icon: '📑', label: 'Kho Tài liệu', title: 'Mở lại danh sách Tài liệu' },
+    courses: { icon: '🎓', label: 'Khóa học Video', title: 'Mở lại danh sách Khóa học' },
+    mockExams: { icon: '✍️', label: 'Hệ thống Đề thi', title: 'Mở lại danh sách Đề thi' },
+    purchased: { icon: '🛍️', label: 'Tài liệu đang thuê', title: 'Mở lại tài liệu đang thuê' },
+    studyPlan: { icon: '📅', label: 'Lộ trình học tập', title: 'Mở lại Lộ trình học' },
+    overview: { icon: '🏠', label: 'Trang tổng quan', title: 'Mở lại Trang tổng quan' },
+    admin: { icon: '⚙️', label: 'Quản trị hệ thống', title: 'Mở lại Quản trị' }
+  };
+
+  const conf = modeConfig[mode] || { icon: '📂', label: 'Danh sách tài liệu', title: 'Mở lại danh sách' };
+
+  if (iconElem) iconElem.textContent = conf.icon;
+  if (tooltipElem) tooltipElem.textContent = conf.label;
+  btnElem.title = conf.title;
+  btnElem.setAttribute('aria-label', conf.title);
+}
+
+function initVideoQrOverlay(fileId, title) {
+  removeVideoQrOverlay();
+
+  const wrapper = document.getElementById('readerContentWrapper');
+  if (!wrapper) return;
+
+  const email = sessionStorage.getItem("userEmail") || getCleanLocalStorage("userEmail") || (typeof currentEmail !== 'undefined' ? currentEmail : "") || "user@hoc.edu.vn";
+  const myAppUrl = window.location.origin + window.location.pathname;
+  const qrPayload = `${myAppUrl}?qr_scan=${encodeURIComponent(email)}`;
+  const devInfo = typeof getWatermarkDeviceInfo === 'function' ? getWatermarkDeviceInfo() : 'PC/Browser';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'videoSecurityQrOverlay';
+  overlay.className = 'video-security-qr-overlay';
+  overlay.innerHTML = `
+    <div class="video-qr-canvas-box">
+      <canvas id="videoQrCanvas"></canvas>
+    </div>
+    <div class="video-qr-text">SEC: ${email} | ${devInfo}</div>
+  `;
+
+  wrapper.appendChild(overlay);
+
+  setTimeout(() => {
+    const canvas = document.getElementById('videoQrCanvas');
+    if (canvas && typeof QRious !== 'undefined') {
+      try {
+        new QRious({
+          element: canvas,
+          value: qrPayload,
+          size: 200,
+          level: 'M'
+        });
+      } catch (e) {
+        console.error("Lỗi khi tạo QR Code bảo mật video:", e);
+      }
+    }
+  }, 60);
+}
+
+function removeVideoQrOverlay() {
+  const overlay = document.getElementById('videoSecurityQrOverlay');
+  if (overlay) {
+    overlay.remove();
+  }
+}
+
+function hideLeftPanel() {
+  const panel = document.getElementById('bookPanel');
+  if (panel) {
+    panel.classList.remove('active', 'panel-slide-in');
+    panel.style.display = 'none';
+  }
+  const btn = document.getElementById('showPanelBtn');
+  if (btn) {
+    updatePanelTriggerInfo(currentView);
+    btn.style.display = 'flex';
+    btn.classList.add('animate-trigger-in');
+    setTimeout(() => {
+      btn.classList.remove('animate-trigger-in');
+    }, 500);
+  }
+}
+
+function showLeftPanel() {
+  const panel = document.getElementById('bookPanel');
+  if (panel) {
+    panel.style.display = 'block';
+    panel.classList.add('active', 'panel-slide-in');
+    setTimeout(() => {
+      panel.classList.remove('panel-slide-in');
+    }, 400);
+  }
+
+  if (currentView) {
+    switchView(currentView);
+  }
+
+  const btn = document.getElementById('showPanelBtn');
+  if (btn) {
+    btn.style.display = 'none';
+  }
+}
+
+
+let currentView = null;
+
+function requestOpenExam(fileId, title, isPaid, btn) {
+  requestOpenBook(fileId, title, isPaid, "exam", "", btn);
+}
+
+let allExams = []; // Khai báo ngoài hàm để tái sử dụng
+
+function loadExams() {
+  const loading = document.getElementById("loadingExam");
+
+  // ⚡ Step 3: Stale-While-Revalidate - Hiển thị ngay từ cache local nếu có
+  const cachedExams = TDSStorageCache.getAny("exams");
+  if (cachedExams && Array.isArray(cachedExams) && cachedExams.length > 0) {
+    allExams = cachedExams;
+    if (currentView === "exams") {
+      renderExamList(allExams);
+      if (loading) loading.style.display = "none";
+    }
+  } else {
+    if (loading) loading.style.display = "flex";
+  }
+
+  // Tải ngầm bản mới nhất để Revalidate
+  google.script.run.withSuccessHandler(function (exams) {
+    if (exams && Array.isArray(exams)) {
+      TDSStorageCache.set("exams", exams);
+      if (currentView !== "exams") return;
+      if (JSON.stringify(allExams) !== JSON.stringify(exams)) {
+        allExams = exams;
+        renderExamList(allExams);
+      }
+      if (loading) loading.style.display = "none";
+    }
+  }).getExams();
+}
+
+
+function renderExamList(exams) {
+  const examList = document.getElementById("examList");
+  if (!examList) return;
+  examList.innerHTML = "";
+
+  if (!exams || exams.length === 0) {
+    examList.innerHTML = "<i>Không tìm thấy tài liệu nào.</i>";
+    return;
+  }
+
+  const root = {};
+  exams.forEach(exam => {
+    const parts = (exam.folder || 'Chưa phân loại').split(" / ");
+    let node = root;
+    parts.forEach((part, i) => {
+      if (!node[part]) node[part] = { __exams: [], __children: {} };
+      if (i === parts.length - 1) node[part].__exams.push(exam);
+      node = node[part].__children;
+    });
+  });
+
+  const treeRoot = root;
+
+  const searchInput = document.getElementById("searchExamInput");
+  const isSearching = searchInput && searchInput.value.trim() !== "";
+
+  function createFolderSection(name, data, level = 0, forceExpand = false, parentPath = "") {
+    const folderPath = parentPath ? `${parentPath} / ${name}` : name;
+    const isNodeActive = forceExpand || (window.expandedFolders && window.expandedFolders.has(folderPath)) || shouldExpandFolderNode(data, window.activeResourceFileId, 'exam');
+    const section = document.createElement("div");
+    section.className = "exam-folder-section";
+    
+    const header = document.createElement("div");
+    header.className = `exam-folder-header level-${level}`;
+
+    header.innerHTML = `
+      <span class="title" title="${name}">📁 ${name}</span>
+      <span class="arrow">${isNodeActive ? "▼" : "▶"}</span>
+    `;
+
+    section.appendChild(header);
+
+    const content = document.createElement("div");
+    content.className = "exam-folder-content";
+    content.style.display = isNodeActive ? "block" : "none";
+
+    header.addEventListener("click", () => {
+      const isHidden = content.style.display === "none";
+      content.style.display = isHidden ? "block" : "none";
+      header.querySelector(".arrow").textContent = isHidden ? "▼" : "▶";
+      if (isHidden) {
+        if (window.expandedFolders) window.expandedFolders.add(folderPath);
+      } else {
+        if (window.expandedFolders) window.expandedFolders.delete(folderPath);
+      }
+    });
+
+    const grid = document.createElement("div");
+    grid.className = "book-grid";
+
+    data.__exams.sort((a, b) => a.title.localeCompare(b.title));
+
+    data.__exams.forEach(exam => {
+      const bookDiv = document.createElement("div");
+      bookDiv.className = "book" + (exam.isPaid ? " vip" : "");
+
+      bookDiv.innerHTML = `
+        <h4 title="${exam.title}">${exam.title}</h4>
+        <button class="read-btn ${exam.isPaid ? 'vip' : ''}" 
+          onclick="requestOpenBook('${exam.fileId}', '${exam.title}', ${exam.isPaid}, 'exam', '${exam.folder}', this)">
+          Xem
+        </button>
+      `;
+
+      grid.appendChild(bookDiv);
+    });
+
+    content.appendChild(grid);
+
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], level + 1, forceExpand, folderPath);
+      content.appendChild(childSection);
+    });
+
+    section.appendChild(content);
+    return section;
+  }
+
+  const fragment = document.createDocumentFragment();
+  Object.keys(treeRoot).sort().forEach(folder => {
+    const data = treeRoot[folder];
+    const hasExams = data.__exams && data.__exams.length > 0;
+    const hasChildren = Object.keys(data.__children).length > 0;
+    if (!hasExams && !hasChildren) return;
+
+    // 1. Render all direct exams inside this level-0 folder
+    if (hasExams) {
+      const grid = document.createElement("div");
+      grid.className = "book-grid";
+
+      data.__exams.sort((a, b) => a.title.localeCompare(b.title));
+      data.__exams.forEach(exam => {
+        const bookDiv = document.createElement("div");
+        bookDiv.className = "book" + (exam.isPaid ? " vip" : "");
+
+        bookDiv.innerHTML = `
+          <h4 title="${exam.title}">${exam.title}</h4>
+          <button class="read-btn ${exam.isPaid ? 'vip' : ''}" 
+            onclick="requestOpenBook('${exam.fileId}', '${exam.title}', ${exam.isPaid}, 'exam', '${exam.folder}', this)">
+            Xem
+          </button>
+        `;
+
+        grid.appendChild(bookDiv);
+      });
+      fragment.appendChild(grid);
+    }
+
+    // 2. Render children of this level-0 folder as folder sections (starting at UI level 0)
+    Object.keys(data.__children).sort().forEach(child => {
+      const childSection = createFolderSection(child, data.__children[child], 0, isSearching, folder);
+      fragment.appendChild(childSection);
+    });
+  });
+  examList.appendChild(fragment);
+}
+
+function filterExams() {
+  const keyword = document.getElementById("searchExamInput").value.toLowerCase().trim();
+  if (!keyword) {
+    renderExamList(allExams);
+    return;
+  }
+  const filtered = allExams.filter(exam =>
+    exam.title.toLowerCase().includes(keyword)
+  );
+  renderExamList(filtered);
+}
+
+let currentUserRole = null;
+let loadToken = 0;
+let screenCaptureInterval = null;
+let allCourses = [];
+let allPurchased = [];
+let allMockExams = [];
+let userSubmittedExams = [];
+let currentPopup = null; // popup đang mở
+
+</script>
